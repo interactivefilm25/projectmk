@@ -1,2 +1,52 @@
-# projectmk
-Ascended Intelligence
+# Ascending Intelligence 
+## Prototype One
+### Overview
+
+The initial prototype of Ascending Intelligence will focus on the integration of OpenSMILE to the Microphone input, and creating dynamic visuals based on the output of the telemetry. 
+
+### Requirements
+
+- [TouchDesigner v2023.12370](https://derivative.ca/download) (Non-Commercial is suitable for testing, Developed on the Commercial License)
+- [Python 3.11.9](https://www.python.org/downloads/)
+
+### Documents
+
+- [Trello](https://trello.com/b/pRlLVtaa/ascending-intelligence-cg2-project-plan)
+- [GDrive](https://drive.google.com/drive/u/0/folders/1yXpYEQyLcP0t8pXBpN6pFj6vftRJXKm4?ths=true)
+- [XMind](https://xmind.ai/share/HIdG5JTK?xid=1MG3EB8p)
+
+### Setup
+
+1. Install TouchDesigner
+2. Install Python
+3. Download this Repository
+4. `cd` into the downloaded repo
+5. In Terminal create the Virtual Environment
+    1. `python -m venv venv`
+    2. `pip install -r requirements.txt` - This is configured to install the `PyTorch GPU` wheel, please adjust to [suit your system](https://pytorch.org/get-started/locally/)
+6. Open the ./touchdesigner/*.toe file
+7. Activate the Python Manager Operator (marked yellow)
+    1. Set Python Executable > Pulse
+    2. Point to venv directory > Base Folder
+    3. Add venv to system path
+    4. Print venv Report (Upon success you should see a list of the installed Python Libraries, including OpenSMILE)
+8. Change to your Git Branch - `git checkout -b dev-[initials]`
+
+### Branching Structure
+
+```mermaid
+graph TD;
+    Main-->DevBM;
+    Main-->DevMA;
+    Main-->DevNG;
+```
+
+### Repo Structure
+
+TouchDesigner will relatively reference this file structure. If changing the structure please notify the team.
+
+- / - configuration files
+- /python - Python files
+- /touchdesigner - TouchDesigner Files
+- /venv - (.gitignore, Do not upload to repo) Python Virtual Environment files
+- /Backup - (.gitignore, Do not upload to repo) TouchDesigner Backup files

@@ -55,3 +55,13 @@ TouchDesigner will relatively reference this file structure. If changing the str
 - /touchdesigner - TouchDesigner Files
 - /venv - (.gitignore, Do not upload to repo) Python Virtual Environment files
 - /Backup - (.gitignore, Do not upload to repo) TouchDesigner Backup files
+
+### Billing
+
+- [Elevenlabs Billing](https://elevenlabs.io/app/subscription)
+- [OpenAI Billing](https://platform.openai.com/settings/organization/billing/overview)
+
+### Credits
+
+- ElevenLabs TOX created by Torin Blankensmith
+- OpenAI TOX created by Torin Blankensmith

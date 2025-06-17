@@ -36,9 +36,9 @@ The initial prototype of Ascending Intelligence will focus on the integration of
 
 ```mermaid
 graph TD;
-    Main-->Dev BM;
-    Main-->Dev MA;
-    Main-->Dev NG;
+    Main-->DevBM;
+    Main-->DevMA;
+    Main-->DevNG;
 ```
 
 ### Repo Structure

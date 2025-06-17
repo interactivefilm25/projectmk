@@ -30,6 +30,7 @@ The initial prototype of Ascending Intelligence will focus on the integration of
     2. Point to venv directory > Base Folder
     3. Add venv to system path
     4. Print venv Report (Upon success you should see a list of the installed Python Libraries, including OpenSMILE)
+8. Change to your Git Branch - `git checkout -b dev-[initials]`
 
 ### Branching Structure
 

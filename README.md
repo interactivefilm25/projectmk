@@ -35,6 +35,7 @@ The initial prototype of Ascending Intelligence will focus on the integration of
     3. Add venv to system path
     4. Print venv Report (Upon success you should see a list of the installed Python Libraries, including OpenSMILE)
 8. Change to your Git Branch - `git checkout -b dev-[initials]`
+9. Copy the `.env_template` file to `.env` and place your API Keys in this file. Do not commit this to the repo. 
 
 ### Branching Structure
 
@@ -54,3 +55,15 @@ TouchDesigner will relatively reference this file structure. If changing the str
 - /touchdesigner - TouchDesigner Files
 - /venv - (.gitignore, Do not upload to repo) Python Virtual Environment files
 - /Backup - (.gitignore, Do not upload to repo) TouchDesigner Backup files
+
+### Billing
+
+- [Elevenlabs Billing](https://elevenlabs.io/app/subscription)
+- [OpenAI Billing](https://platform.openai.com/settings/organization/billing/overview)
+    - Auto re-bill upon token threshold
+
+### Credits
+
+- ElevenLabs TOX created by Torin Blankensmith
+- OpenAI TOX created by Torin Blankensmith
+- Whisper Component by Torin Blankensmith

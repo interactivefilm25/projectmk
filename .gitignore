@@ -41,3 +41,4 @@ venv/*
 python/__pycache__/*
 Backup/
 *.*.toe
+.env

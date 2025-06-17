@@ -31,9 +31,6 @@ PyYAML==6.0.2
 six==1.17.0
 soundfile==0.13.1
 sympy==1.13.3
-torch==2.7.1+cu128
-torchaudio==2.7.1+cu128
-torchvision==0.22.1+cu128
 tqdm==4.67.1
 typing_extensions==4.12.2
 tzdata==2025.2

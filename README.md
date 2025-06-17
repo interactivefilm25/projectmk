@@ -60,8 +60,10 @@ TouchDesigner will relatively reference this file structure. If changing the str
 
 - [Elevenlabs Billing](https://elevenlabs.io/app/subscription)
 - [OpenAI Billing](https://platform.openai.com/settings/organization/billing/overview)
+    - Auto re-bill upon token threshold
 
 ### Credits
 
 - ElevenLabs TOX created by Torin Blankensmith
 - OpenAI TOX created by Torin Blankensmith
+- Whisper Component by Torin Blankensmith

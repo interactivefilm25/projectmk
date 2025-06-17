@@ -23,7 +23,11 @@ The initial prototype of Ascending Intelligence will focus on the integration of
 4. `cd` into the downloaded repo
 5. In Terminal create the Virtual Environment
     1. `python -m venv venv`
-    2. `pip install -r requirements.txt` - This is configured to install the `PyTorch GPU` wheel, please adjust to [suit your system](https://pytorch.org/get-started/locally/)
+    2. `./venv/Scripts/activate` to activate the Virtual Environment
+    3. `pip install -r requirements.txt`
+    4. Install the PyTorch version that matches [your system](https://pytorch.org/get-started/locally/)
+        1. If you do not have a GPU, select Stable, Pip, Python, CPU
+        2. If you have a GPU, select Stable, Pip, Python, CUDA (Version)
 6. Open the ./touchdesigner/*.toe file
 7. Activate the Python Manager Operator (marked yellow)
     1. Set Python Executable > Pulse

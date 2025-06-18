@@ -56,6 +56,11 @@ TouchDesigner will relatively reference this file structure. If changing the str
 - /venv - (.gitignore, Do not upload to repo) Python Virtual Environment files
 - /Backup - (.gitignore, Do not upload to repo) TouchDesigner Backup files
 
+### DMX
+
+- ./touchdesigner/promptGenerator.toe contains the DMX Output to the local network. This can be updated when the final network is configured and DMX Fixtures are in place. 
+- During development we are simulating on [Capture 2025](https://www.capture.se/Downloads/Download-Capture) with a Generic RGB Par Can Fixture on Universe 1 channels 1-6, localhost network. 
+
 ### Billing
 
 - [Elevenlabs Billing](https://elevenlabs.io/app/subscription)

@@ -1,7 +1,7 @@
 import opensmile
-import numpy as np
 import joblib
-import os.path
+import numpy as np
+import pandas as pd
 
 audio_buffer_chop = op('nullAudio')
 sampling_rate = op('audiodevin1').par.rate
@@ -13,23 +13,12 @@ def onInitialize(timerOp, callCount):
 	print('Init 2 OpenSMILE Analysis')
 
 	model_path = os.path.relpath(env_params['OPENSMILE_MODEL_PATH', 1].val)
-	# model_path = r"C:\Users\Dev\Documents\Projects\KarenPalmer\AscendingIntelligence\python\model.pkl"
-	# with open(model_path, 'rb') as f:
-	# 	me.storage['model'] = f.read()
-	# 	print(f"Model file {model_path} opened successfully.")
-	# return 0
-
-	# conf_path = os.path.relpath(env_params['OPENSMILE_EMOBASE_CONF', 1].val)
-	# model_path = os.path.relpath(env_params['OPENSMILE_MODEL_PATH', 1].val)
 
 	smile = opensmile.Smile(
 		feature_set=opensmile.FeatureSet.emobase,
     	feature_level=opensmile.FeatureLevel.Functionals,
 	)
-		#feature_set=opensmile.FeatureSet.eGeMAPSv02,
-	    #feature_set=opensmile.FeatureSet.ComParE_2016,
 	me.storage['smile_instance'] = smile
-
 	me.storage['model'] = joblib.load(model_path)
 
 	print(f"Successfully initialized with FeatureSet: {smile.feature_set.name}")
@@ -76,36 +65,31 @@ def onDone(timerOp, segment, interrupt):
 	
 	signal_mono = np_array[0]
 
-	try:
-		features = smile.process_signal(
-			signal=signal_mono,
-			sampling_rate=sampling_rate
-		)
+	emo, probs = predict(signal_mono)
+	print(f"Predicted Emotion: {emo}")
+	for index, (emotion, prob) in enumerate(probs.items()):
+		output_table[index, 0] = emotion
+		output_table[index, 1] = prob/100.
+		print(f"{index} {emotion:9s}: {prob:6.2f}%")
 
-		trained_cols = model.feature_names_in_
-		X = features.to_numpy().reshape(1, -1)
-		X_df = np.zeros((1, len(trained_cols)))
-		for i, feat in enumerate(features.columns):
-			if feat in trained_cols:
-				idx = list(trained_cols).index(feat)
-				X_df[0, idx] = X[0, i]
-		probs = model.predict_proba(X_df)[0]
-		emo = model.classes_[np.argmax(probs)]
-
-		# print(X)
-		# print(f"Feature names from model: {trained_cols}")
-		# print(emo)
-		
-		output_table.clear()
-		output_table.appendRow(emo)
-		# output_table.appendRow(features.iloc[0].tolist())
-		#print(features.iloc[0].tolist())
-
-	except Exception as e:
-		print(f"Error during OpenSMILE processing: {e}")
-	return
+	return 0
 
 def onSubrangeStart(timerOp):
 	return
 
+def predict(signal):
+	smile = me.storage.get('smile_instance')
+	model = me.storage.get('model')
+
+	features = smile.process_signal(
+		signal=signal,
+        sampling_rate=sampling_rate
+    )
+
+	trained_cols = model.feature_names_in_
+	aligned_features = features.reindex(columns=trained_cols, fill_value=0.0)    
 	
+	probs = model.predict_proba(aligned_features)[0]
+	emo = model.classes_[np.argmax(probs)]
+
+	return emo, dict(zip(model.classes_, (probs * 100).round(2)))

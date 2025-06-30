@@ -37,6 +37,12 @@ The initial prototype of Ascending Intelligence will focus on the integration of
 8. Change to your Git Branch - `git checkout -b dev-[initials]`
 9. Copy the `.env_template` file to `.env` and place your API Keys in this file. Do not commit this to the repo. 
 
+### TouchDesigner Python Modifications
+
+In order to run Scikit on TouchDesigner (OpenSMILE component) it is necessary to update numpy on the TouchDesigner Python implementation. 
+
+1. `C:\Program Files\Derivative\TouchDesigner\bin\python.exe -m pip install "numpy==1.26.4" scikit-learn` 
+
 ### Branching Structure
 
 ```mermaid

@@ -62,6 +62,7 @@ def onDone(timerOp, segment, interrupt):
 
 	source_chop = audio_buffer_chop
 	np_array = source_chop.numpyArray()
+	# print(np_array.shape)
 	
 	signal_mono = np_array[0]
 

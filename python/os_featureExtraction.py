@@ -70,7 +70,7 @@ def onDone(timerOp, segment, interrupt):
 	for index, (emotion, prob) in enumerate(probs.items()):
 		output_table[index, 0] = emotion
 		output_table[index, 1] = prob/100.
-		print(f"{index} {emotion:9s}: {prob:6.2f}%")
+		# print(f"{index} {emotion:9s}: {prob:6.2f}%")
 
 	return 0
 

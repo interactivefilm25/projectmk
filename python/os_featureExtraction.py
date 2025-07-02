@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 
 audio_buffer_chop = op('nullAudio')
-sampling_rate = op('audiodevin1').par.rate
+sampling_rate = int(op('info1')['sample_rate'])
 output_table = op('table_features')
 env_params = op('APIKeys')
 
@@ -66,8 +66,9 @@ def onDone(timerOp, segment, interrupt):
 	
 	signal_mono = np_array[0]
 
-	emo, probs = predict(signal_mono)
+	emo, probs = predict(np_array)
 	print(f"Predicted Emotion: {emo}")
+
 	for index, (emotion, prob) in enumerate(probs.items()):
 		output_table[index, 0] = emotion
 		output_table[index, 1] = prob/100.
@@ -81,14 +82,14 @@ def onSubrangeStart(timerOp):
 def predict(signal):
 	smile = me.storage.get('smile_instance')
 	model = me.storage.get('model')
-
+	
 	features = smile.process_signal(
 		signal=signal,
         sampling_rate=sampling_rate
     )
 
 	trained_cols = model.feature_names_in_
-	aligned_features = features.reindex(columns=trained_cols, fill_value=0.0)    
+	aligned_features = features.reindex(columns=trained_cols, fill_value=0.0)  
 	
 	probs = model.predict_proba(aligned_features)[0]
 	emo = model.classes_[np.argmax(probs)]

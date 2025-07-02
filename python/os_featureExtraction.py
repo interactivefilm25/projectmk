@@ -2,11 +2,12 @@ import opensmile
 import joblib
 import numpy as np
 import pandas as pd
+import os
 
 audio_buffer_chop = op('nullAudio')
-sampling_rate = int(op('info1')['sample_rate'])
+sampling_rate = op('constants')['sample_rate']
 output_table = op('table_features')
-env_params = op('APIKeys')
+env_params = op('../APIKeys')
 
 def onInitialize(timerOp, callCount):
 	clear()

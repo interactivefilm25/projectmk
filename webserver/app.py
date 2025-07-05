@@ -3,6 +3,7 @@ import os
 import numpy as np
 import soundfile as sf
 from io import BytesIO
+from pydub import AudioSegment
 
 if not os.path.exists("uploads"):
     os.makedirs("uploads")
@@ -39,10 +40,14 @@ async def audio_stream():
                 audio_file.write(data)
                 print(f"Received data chunk of size {len(data)} bytes")
 
-                # Process the received audio data into numpy array
-                try: 
+                try:
                     audio_stream = BytesIO(data)
-                    audio_chunk, _ = sf.read(audio_stream, dtype='float32')
+                    audio_segment = AudioSegment.from_file(audio_stream, format="webm")
+                    wav_data = BytesIO()
+                    audio_segment.export(wav_data, format="wav")
+                    wav_data.seek(0)
+
+                    audio_chunk, _ = sf.read(wav_data, dtype='float32')
                     audio_data.append(audio_chunk)
                     print(f"Processed Audio chunk shape: {audio_chunk.shape}")
                 except Exception as e:

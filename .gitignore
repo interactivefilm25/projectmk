@@ -38,7 +38,8 @@ terraform.rc
 
 .DS_Store
 venv/*
-python/__pycache__/*
+webvenv/*
+*/__pycache__/*
 Backup/
 *.*.toe
 .env

@@ -37,6 +37,17 @@ The initial prototype of Ascending Intelligence will focus on the integration of
 8. Change to your Git Branch - `git checkout -b dev-[initials]`
 9. Copy the `.env_template` file to `.env` and place your API Keys in this file. Do not commit this to the repo. 
 
+### Web Setup
+
+This instruction creates a new virtual environment for the web server implementation of the OpenSMILE model
+
+1. `python -m venv webvenv`
+2. `.\webvenv\Scripts\activate`
+3. `cd webserver`
+4. `pip install -r requirements.txt`
+5. `quart run`
+6. Open website `http://127.0.0.1:5000`
+
 ### TouchDesigner Python Modifications
 
 In order to run Scikit on TouchDesigner (OpenSMILE component) it is necessary to update numpy on the TouchDesigner Python implementation. 

@@ -43,3 +43,4 @@ webvenv/*
 Backup/
 *.*.toe
 .env
+webserver/uploads/*

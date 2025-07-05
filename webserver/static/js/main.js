@@ -1,6 +1,7 @@
 let recordbutton
 let mediaRecorder
 let audioChunks = []
+let socket
 
 const init = async () => {
     console.log("recorder initialized")
@@ -11,32 +12,40 @@ const init = async () => {
 
     const stream = await getMicrophoneAccess()
     mediaRecorder = new MediaRecorder(stream)
+
+    socket = new WebSocket("ws://127.0.0.1:5000/ws")
+    
+    socket.onopen = () => {
+        console.log("WebSocket connection established")
+    }
+
+    socket.onerror = (error) => {
+        console.error("WebSocket error:", error)
+    }
+
+    socket.onclose = () => {
+        console.log("WebSocket connection closed")
+    }
+
     mediaRecorder.ondataavailable = event => {
-        audioChunks.push(event.data);
+        const audioChunk = event.data
+
+        if (socket.readyState === WebSocket.OPEN) {
+            socket.send(audioChunk)
+            console.log("Audio chunk sent: ", audioChunk)
+        } else {
+            console.error("WebSocket is not open. Cannot send audio chunk.")
+        }
     }
 
     mediaRecorder.onstop = async () => {
-        const audioBlob = new Blob(audioChunks, { type: 'audio/webm' })
-        audioChunks = [] // Clear the chunks for the next recording
-        console.log("Audio Blob created:", audioBlob)
+        console.log("Recording stopped")
 
-        const formData = new FormData()
-        formData.append("audio", audioBlob, "recording.webm")
-
-        try {
-            const response = await fetch("/api/upload-audio", {
-                method: "POST",
-                body: formData
-            });
-
-            if (!response.ok) {
-                throw new Error("Network response was not ok");
-            }
-
-            const data = await response.json();
-            console.log("Server response:", data);
-        } catch (error) {
-            console.error("Error sending audio to server:", error);
+        if (socket.readyState === WebSocket.OPEN) {
+            socket.send("END")
+            console.log("Sent END message to WebSocket")
+            socket.close()
+            console.log("WebSocket connection closed")
         }
     }
 }

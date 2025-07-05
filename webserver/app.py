@@ -24,8 +24,24 @@ async def upload_audio():
 # async def json():
 #     return {"hello": "world"}
 
-# @app.websocket("/ws")
-# async def ws():
+@app.websocket("/ws")
+async def audio_stream():
+    audio_file_path = "uploads/streamed_audio.webm"
+    try:
+        with open(audio_file_path, "wb") as audio_file:
+            while True:
+                data = await websocket.receive()
+                if data == "END":
+                    print("Recording ended")
+                    break
+                audio_file.write(data)
+                print(f"Received data chunk of size {len(data)} bytes")
+        print(f"Audio saved to {audio_file_path}")
+    except ConnectionResetError:
+        print("WebSocket connection closed by client")
+    except Exception as e:
+        print(f"An error occurred: {e}")
+
 #     while True:
 #         await websocket.send("hello")
 #         await websocket.send_json({"hello": "world"})

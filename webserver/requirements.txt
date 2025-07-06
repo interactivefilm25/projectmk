@@ -1,3 +1,8 @@
 quart
 numpy
 soundfile
+pydub
+joblib
+scikit-learn
+opensmile
+pandas

@@ -11,7 +11,7 @@ import pandas as pd
 if not os.path.exists("uploads"):
     os.makedirs("uploads")
 
-model_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../python/model.pkl"))
+model_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../models/voice_emotion_model.pkl"))
 model = joblib.load(model_path)
 
 smile = opensmile.Smile(

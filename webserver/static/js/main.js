@@ -4,6 +4,7 @@ let audioChunks = []
 let socket
 
 let chunk_duration = 500
+let pingInterval
 
 const init = async () => {
     console.log("recorder initialized")
@@ -19,6 +20,30 @@ const init = async () => {
     
     socket.onopen = () => {
         console.log("WebSocket connection established")
+
+        pingInterval = setInterval(() => {
+            if (socket.readyState === WebSocket.OPEN) {
+                socket.send("PING")
+            }
+        }, 30000) // Send a ping every 30 seconds
+    }
+
+    socket.onmessage = async (event) => {
+        let text;
+        if (event.data instanceof Blob) {
+            console.log("Received Blob data from server");
+            text = await event.data.text();
+        } else {
+            text = event.data;
+        }
+        console.log("Decoded message:", text);
+
+        if (text.includes("{")) { // Parse JSON
+            const obj = JSON.parse(text); 
+            document.getElementById("detectedProbabilities").innerText = "Probabilities: " + JSON.stringify(obj, null, 2);
+        } else { // Parse text
+            document.getElementById("detectedEmotion").innerText = text;
+        }
     }
 
     socket.onerror = (error) => {
@@ -27,6 +52,7 @@ const init = async () => {
 
     socket.onclose = () => {
         console.log("WebSocket connection closed")
+        clearInterval(pingInterval) // Clear the ping interval when the socket closes
     }
 
     mediaRecorder.ondataavailable = event => {
@@ -46,8 +72,6 @@ const init = async () => {
         if (socket.readyState === WebSocket.OPEN) {
             socket.send("END")
             console.log("Sent END message to WebSocket")
-            socket.close()
-            console.log("WebSocket connection closed")
         }
     }
 }
@@ -73,6 +97,10 @@ const startRecording = async () => {
         mediaRecorder.start();
         console.log("Recording started");
     }
+
+    document.getElementById("detectedEmotion").innerText = "Recording..."
+    audioChunks = []; // Clear previous audio chunks
+    console.log("Audio chunks cleared");
 }
 
 const stopRecording = async () => {

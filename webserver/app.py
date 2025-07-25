@@ -1,9 +1,9 @@
 from quart import Quart, render_template, websocket, request
+from pydub import AudioSegment
 import os
 import numpy as np
 import soundfile as sf
 from io import BytesIO
-from pydub import AudioSegment
 import joblib
 import json
 import opensmile
@@ -12,13 +12,15 @@ import pandas as pd
 if not os.path.exists("uploads"):
     os.makedirs("uploads")
 
-model_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../models/voice_emotion_model.pkl"))
+model_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../models/rf_compare_model.pkl"))
 model = joblib.load(model_path)
 
 smile = opensmile.Smile(
     feature_set=opensmile.FeatureSet.emobase,
     feature_level=opensmile.FeatureLevel.Functionals,
 )
+
+audio_file_path = "uploads/streamed_audio.wav"
 
 app = Quart(__name__)
 
@@ -38,7 +40,6 @@ async def upload_audio():
 
 @app.websocket("/ws")
 async def audio_stream():
-    audio_file_path = "uploads/streamed_audio.wav"
     audio_data = []
 
     while True:
@@ -54,28 +55,69 @@ async def audio_stream():
             all_bytes = b''.join(audio_data)
             audio_stream = BytesIO(all_bytes)
             audio_segment = AudioSegment.from_file(audio_stream, format="webm")
-            audio_segment.export("uploads/streamed_audio.wav", format="wav")
-            print(f"Saved concatenated audio to uploads/streamed_audio.wav")
+            audio_segment = audio_segment.set_frame_rate(16000)
+            audio_segment.export(audio_file_path, format="wav", parameters=["-acodec", "pcm_s16le"])
+            print(f"Saved concatenated audio to {audio_file_path} at 16kHz")
 
             await predict()
 
         elif data == "KILL":
             os._exit(0)
 
+        elif data == "TEST":
+            await testAction()
+
         else: # Process audio data
             print(f"Received data chunk of size {len(data)} bytes")
             audio_data.append(data)
 
 async def predict():
-    features = smile.process_file("uploads/streamed_audio.wav")
-    trained_cols = model.feature_names_in_
-    aligned_features = features.reindex(columns=trained_cols, fill_value=0.0)
-    probs = model.predict_proba(aligned_features)[0]
-    emo = model.classes_[np.argmax(probs)]
-    probababilities = dict(zip(model.classes_, (probs * 100).round(2)))
+    if os.path.exists(audio_file_path):
+        features = smile.process_file(audio_file_path)
+        X = features.values.reshape(1, -1)
+        probs = model.predict_proba(X)[0]
+        classes = model.classes_
+        top = sorted(zip(classes, probs), key=lambda x: x[1], reverse=True)
 
-    print(f"Model emotion prediction: {emo}")
-    print(f"Probabilities: {probababilities}")
+        result = {
+            "top": top[0][0].upper(),
+            "predictions": [{"label": label, "probability": float(prob)} for label, prob in top]
+        }
+        print(f"[predict] Model emotion prediction: {result}")
+        await websocket.send(json.dumps(result).encode())
+    else:
+        print(f"[predict] File {audio_file_path} does not exist.")
 
-    await websocket.send(json.dumps(emo).encode())
-    await websocket.send(json.dumps(probababilities).encode())
+async def testAction():
+    print("Test action triggered")
+    # Load the audio file and print the first 10 samples
+    # audio_path = "uploads/streamed_audio.wav"
+    if os.path.exists(audio_file_path):
+        # Try soundfile
+        data, samplerate = sf.read(audio_file_path)
+        print(f"[soundfile] dtype: {data.dtype}, shape: {data.shape}, sample rate: {samplerate}")
+        print(f"[soundfile] min: {np.min(data)}, max: {np.max(data)}, mean: {np.mean(data)}, std: {np.std(data)}")
+
+        # Run the model prediction pipeline
+        await predict()
+        # features = smile.process_file(audio_file_path)
+        # X = features.values.reshape(1, -1)
+        # probs = model.predict_proba(X)[0]
+        # classes = model.classes_
+        # top = sorted(zip(classes, probs), key=lambda x: x[1], reverse=True)
+
+        # features = smile.process_file(audio_path)
+        # trained_cols = model.feature_names_in_
+        # aligned_features = features.reindex(columns=trained_cols, fill_value=0.0)
+        # probs = model.predict_proba(aligned_features)[0]
+        # emo = model.classes_[np.argmax(probs)]
+        # probababilities = dict(zip(model.classes_, (probs * 100).round(2)))
+
+        # print(f"[testAction] Model emotion prediction: {top[0][0].upper()}")
+        # for label, prob in top:
+        #     print(f"[testAction] {label}: {round(prob*100, 2)}%")
+    else:
+        print(f"File {audio_file_path} does not exist.")
+
+if __name__ == "__main__":
+    app.run(debug=True)

@@ -68,17 +68,6 @@ const openWebSocket = () => {
             document.getElementById("detectedProbabilities").innerText = "Probabilities:\n " + JSON.parse(data).predictions.map(p => `${p.label}: ${p.probability}`).join(",\n ")
 
         }
-        // } else {
-        //     data = event.data;
-        // }
-        // console.log("Decoded message:", text)
-
-        // document.getElementById("detectedProbabilities").innerText = JSON.stringify(data, null, 2)
-        // if (text.includes("{")) { // Parse JSON
-        //     const obj = JSON.parse(text); 
-        //     document.getElementById("detectedProbabilities").innerText = "Probabilities: " + JSON.stringify(obj, null, 2);
-        // } else { // Parse text
-        //     document.getElementById("detectedEmotion").innerText = text;
     }
 
     socket.onerror = (error) => {

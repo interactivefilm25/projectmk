@@ -21,6 +21,7 @@ smile = opensmile.Smile(
 )
 
 audio_file_path = "uploads/streamed_audio.wav"
+# audio_file_path = "../data/audioSamples/neutral.wav" # test on trained files
 
 app = Quart(__name__)
 
@@ -90,8 +91,6 @@ async def predict():
 
 async def testAction():
     print("Test action triggered")
-    # Load the audio file and print the first 10 samples
-    # audio_path = "uploads/streamed_audio.wav"
     if os.path.exists(audio_file_path):
         # Try soundfile
         data, samplerate = sf.read(audio_file_path)
@@ -100,22 +99,6 @@ async def testAction():
 
         # Run the model prediction pipeline
         await predict()
-        # features = smile.process_file(audio_file_path)
-        # X = features.values.reshape(1, -1)
-        # probs = model.predict_proba(X)[0]
-        # classes = model.classes_
-        # top = sorted(zip(classes, probs), key=lambda x: x[1], reverse=True)
-
-        # features = smile.process_file(audio_path)
-        # trained_cols = model.feature_names_in_
-        # aligned_features = features.reindex(columns=trained_cols, fill_value=0.0)
-        # probs = model.predict_proba(aligned_features)[0]
-        # emo = model.classes_[np.argmax(probs)]
-        # probababilities = dict(zip(model.classes_, (probs * 100).round(2)))
-
-        # print(f"[testAction] Model emotion prediction: {top[0][0].upper()}")
-        # for label, prob in top:
-        #     print(f"[testAction] {label}: {round(prob*100, 2)}%")
     else:
         print(f"File {audio_file_path} does not exist.")
 

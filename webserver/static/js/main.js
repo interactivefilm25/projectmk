@@ -4,6 +4,7 @@ let audioChunks = []
 let socket
 
 let chunk_duration = 500
+let pingInterval
 
 const init = async () => {
     console.log("recorder initialized")
@@ -11,23 +12,14 @@ const init = async () => {
     recordButton = document.getElementById("recordButton")
     recordButton.addEventListener("mousedown", startRecording)
     recordButton.addEventListener("mouseup", stopRecording)
-
+    
+    killButton = document.getElementById("killButton")
+    killButton.addEventListener("click", killServer)
+    
     const stream = await getMicrophoneAccess()
     mediaRecorder = new MediaRecorder(stream, { mimeType: "audio/webm" })
-    
-    socket = new WebSocket("ws://127.0.0.1:5000/ws")
-    
-    socket.onopen = () => {
-        console.log("WebSocket connection established")
-    }
 
-    socket.onerror = (error) => {
-        console.error("WebSocket error:", error)
-    }
-
-    socket.onclose = () => {
-        console.log("WebSocket connection closed")
-    }
+    openWebSocket()
 
     mediaRecorder.ondataavailable = event => {
         const audioChunk = event.data
@@ -46,9 +38,51 @@ const init = async () => {
         if (socket.readyState === WebSocket.OPEN) {
             socket.send("END")
             console.log("Sent END message to WebSocket")
-            socket.close()
-            console.log("WebSocket connection closed")
         }
+    }
+}
+
+const openWebSocket = () => {
+    socket = new WebSocket("ws://127.0.0.1:5000/ws")
+    
+    socket.onopen = () => {
+        console.log("WebSocket connection established")
+
+        pingInterval = setInterval(() => {
+            if (socket.readyState === WebSocket.OPEN) {
+                socket.send("PING")
+            }
+        }, 3000) // Send a ping every 30 seconds
+    }
+
+    socket.onmessage = async (event) => {
+        let text;
+        if (event.data instanceof Blob) {
+            console.log("Received Blob data from server");
+            text = await event.data.text();
+        } else {
+            text = event.data;
+        }
+        console.log("Decoded message:", text);
+
+        if (text.includes("{")) { // Parse JSON
+            const obj = JSON.parse(text); 
+            document.getElementById("detectedProbabilities").innerText = "Probabilities: " + JSON.stringify(obj, null, 2);
+        } else { // Parse text
+            document.getElementById("detectedEmotion").innerText = text;
+        }
+    }
+
+    socket.onerror = (error) => {
+        console.error("WebSocket error:", error)
+    }
+
+    socket.onclose = () => {
+        console.log("WebSocket connection closed")
+        clearInterval(pingInterval) // Clear the ping interval when the socket closes
+        
+        openWebSocket() // Reconnect
+        console.log("Reconnecting WebSocket...")
     }
 }
 
@@ -73,6 +107,10 @@ const startRecording = async () => {
         mediaRecorder.start();
         console.log("Recording started");
     }
+
+    document.getElementById("detectedEmotion").innerText = "Recording..."
+    audioChunks = []; // Clear previous audio chunks
+    console.log("Audio chunks cleared");
 }
 
 const stopRecording = async () => {
@@ -81,6 +119,11 @@ const stopRecording = async () => {
         mediaRecorder.stop();
         console.log("Recording stopped");
     }
+}
+
+const killServer = async () => {
+    console.log("Killing server...")
+    socket.send("KILL")
 }
 
 document.addEventListener("DOMContentLoaded", init)

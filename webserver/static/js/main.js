@@ -16,6 +16,9 @@ const init = async () => {
     killButton = document.getElementById("killButton")
     killButton.addEventListener("click", killServer)
     
+    testButton = document.getElementById("testButton")
+    testButton.addEventListener("click", testAction)
+    
     const stream = await getMicrophoneAccess()
     mediaRecorder = new MediaRecorder(stream, { mimeType: "audio/webm" })
 
@@ -56,21 +59,26 @@ const openWebSocket = () => {
     }
 
     socket.onmessage = async (event) => {
-        let text;
+        let data
         if (event.data instanceof Blob) {
-            console.log("Received Blob data from server");
-            text = await event.data.text();
-        } else {
-            text = event.data;
-        }
-        console.log("Decoded message:", text);
+            data = await event.data.text()
+            console.log("Received Blob data from server", data)
 
-        if (text.includes("{")) { // Parse JSON
-            const obj = JSON.parse(text); 
-            document.getElementById("detectedProbabilities").innerText = "Probabilities: " + JSON.stringify(obj, null, 2);
-        } else { // Parse text
-            document.getElementById("detectedEmotion").innerText = text;
+            document.getElementById("detectedEmotion").innerText = JSON.parse(data).top
+            document.getElementById("detectedProbabilities").innerText = "Probabilities:\n " + JSON.parse(data).predictions.map(p => `${p.label}: ${p.probability}`).join(",\n ")
+
         }
+        // } else {
+        //     data = event.data;
+        // }
+        // console.log("Decoded message:", text)
+
+        // document.getElementById("detectedProbabilities").innerText = JSON.stringify(data, null, 2)
+        // if (text.includes("{")) { // Parse JSON
+        //     const obj = JSON.parse(text); 
+        //     document.getElementById("detectedProbabilities").innerText = "Probabilities: " + JSON.stringify(obj, null, 2);
+        // } else { // Parse text
+        //     document.getElementById("detectedEmotion").innerText = text;
     }
 
     socket.onerror = (error) => {
@@ -124,6 +132,16 @@ const stopRecording = async () => {
 const killServer = async () => {
     console.log("Killing server...")
     socket.send("KILL")
+}
+
+const testAction = async () => {
+    console.log("Test action triggered")
+    if (socket.readyState === WebSocket.OPEN) {
+        socket.send("TEST")
+        console.log("Sent TEST message to WebSocket")
+    } else {
+        console.error("WebSocket is not open. Cannot send TEST message.")
+    }
 }
 
 document.addEventListener("DOMContentLoaded", init)

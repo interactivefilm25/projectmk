@@ -45,7 +45,7 @@ This instruction creates a new virtual environment for the web server implementa
 2. `.\webvenv\Scripts\activate`
 3. `cd webserver`
 4. `pip install -r requirements.txt`
-5. `quart run`
+5. `quart run --reload`
 6. Open website `http://127.0.0.1:5000`
 
 ### TouchDesigner Python Modifications

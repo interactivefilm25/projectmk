@@ -12,10 +12,37 @@ const init = async () => {
     recordButton = document.getElementById("recordButton")
     recordButton.addEventListener("mousedown", startRecording)
     recordButton.addEventListener("mouseup", stopRecording)
-
+    
+    killButton = document.getElementById("killButton")
+    killButton.addEventListener("click", killServer)
+    
     const stream = await getMicrophoneAccess()
     mediaRecorder = new MediaRecorder(stream, { mimeType: "audio/webm" })
-    
+
+    openWebSocket()
+
+    mediaRecorder.ondataavailable = event => {
+        const audioChunk = event.data
+
+        if (socket.readyState === WebSocket.OPEN) {
+            socket.send(audioChunk)
+            console.log("Audio chunk sent: ", audioChunk)
+        } else {
+            console.error("WebSocket is not open. Cannot send audio chunk.")
+        }
+    }
+
+    mediaRecorder.onstop = async () => {
+        console.log("Recording stopped")
+
+        if (socket.readyState === WebSocket.OPEN) {
+            socket.send("END")
+            console.log("Sent END message to WebSocket")
+        }
+    }
+}
+
+const openWebSocket = () => {
     socket = new WebSocket("ws://127.0.0.1:5000/ws")
     
     socket.onopen = () => {
@@ -25,7 +52,7 @@ const init = async () => {
             if (socket.readyState === WebSocket.OPEN) {
                 socket.send("PING")
             }
-        }, 30000) // Send a ping every 30 seconds
+        }, 3000) // Send a ping every 30 seconds
     }
 
     socket.onmessage = async (event) => {
@@ -53,26 +80,9 @@ const init = async () => {
     socket.onclose = () => {
         console.log("WebSocket connection closed")
         clearInterval(pingInterval) // Clear the ping interval when the socket closes
-    }
-
-    mediaRecorder.ondataavailable = event => {
-        const audioChunk = event.data
-
-        if (socket.readyState === WebSocket.OPEN) {
-            socket.send(audioChunk)
-            console.log("Audio chunk sent: ", audioChunk)
-        } else {
-            console.error("WebSocket is not open. Cannot send audio chunk.")
-        }
-    }
-
-    mediaRecorder.onstop = async () => {
-        console.log("Recording stopped")
-
-        if (socket.readyState === WebSocket.OPEN) {
-            socket.send("END")
-            console.log("Sent END message to WebSocket")
-        }
+        
+        openWebSocket() // Reconnect
+        console.log("Reconnecting WebSocket...")
     }
 }
 
@@ -109,6 +119,11 @@ const stopRecording = async () => {
         mediaRecorder.stop();
         console.log("Recording stopped");
     }
+}
+
+const killServer = async () => {
+    console.log("Killing server...")
+    socket.send("KILL")
 }
 
 document.addEventListener("DOMContentLoaded", init)

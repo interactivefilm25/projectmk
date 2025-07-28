@@ -21,6 +21,7 @@ smile = opensmile.Smile(
 )
 
 audio_file_path = "uploads/streamed_audio.wav"
+# audio_file_path = "../data/audioSamples/neutral.wav" # test on trained files
 
 app = Quart(__name__)
 
@@ -71,27 +72,57 @@ async def audio_stream():
             print(f"Received data chunk of size {len(data)} bytes")
             audio_data.append(data)
 
+def map_vibration(f0_hz: float) -> str:
+    if f0_hz <= 120:
+        return "calm/reflective (75-120 Hz)"
+    if f0_hz <= 180:
+        return "stable/ordinary (120-180 Hz)"
+    if f0_hz <= 250:
+        return "energised/attentive (180-250 Hz)"
+    if f0_hz <= 350:
+        return "excited/anxious (250-350 Hz)"
+    if f0_hz <= 500:
+        return "overstimulated/fragile (350-500 Hz)"
+    return "alarm/chaos (>500 Hz)"
+
 async def predict():
     if os.path.exists(audio_file_path):
         features = smile.process_file(audio_file_path)
-        X = features.values.reshape(1, -1)
+        expected_features = model.feature_names_in_
+        X_df = pd.DataFrame([features.values.flatten()], columns=features.columns)
+        X_df = X_df.reindex(columns=expected_features, fill_value=0)
+        X = X_df.values
+
         probs = model.predict_proba(X)[0]
-        classes = model.classes_
-        top = sorted(zip(classes, probs), key=lambda x: x[1], reverse=True)
+        labels = model.classes_
+        ranked = sorted(zip(labels, probs), key=lambda x: x[1], reverse=True)
+
+        emotion_probabilities = [
+            {"label": lbl, "certainty": round(float(p), 2)}
+            for lbl, p in sorted(ranked, key=lambda x: x[1], reverse=True)
+        ]
+
+        frequency = 0
+        mean_vibration = 0
+        if "F0_sma_amean" in features.columns:
+            f0 = float(features["F0_sma_amean"].iloc[0])
+            frequency = map_vibration(f0)
+            mean_vibration = round(f0, 2)
 
         result = {
-            "top": top[0][0].upper(),
-            "predictions": [{"label": label, "probability": float(prob)} for label, prob in top]
+            "emotions_sorted": emotion_probabilities,
+            "vibration": {
+                "mean": mean_vibration,
+                "frequency": frequency
+            }
         }
-        print(f"[predict] Model emotion prediction: {result}")
+        print(result)
         await websocket.send(json.dumps(result).encode())
     else:
         print(f"[predict] File {audio_file_path} does not exist.")
 
 async def testAction():
     print("Test action triggered")
-    # Load the audio file and print the first 10 samples
-    # audio_path = "uploads/streamed_audio.wav"
     if os.path.exists(audio_file_path):
         # Try soundfile
         data, samplerate = sf.read(audio_file_path)
@@ -100,22 +131,6 @@ async def testAction():
 
         # Run the model prediction pipeline
         await predict()
-        # features = smile.process_file(audio_file_path)
-        # X = features.values.reshape(1, -1)
-        # probs = model.predict_proba(X)[0]
-        # classes = model.classes_
-        # top = sorted(zip(classes, probs), key=lambda x: x[1], reverse=True)
-
-        # features = smile.process_file(audio_path)
-        # trained_cols = model.feature_names_in_
-        # aligned_features = features.reindex(columns=trained_cols, fill_value=0.0)
-        # probs = model.predict_proba(aligned_features)[0]
-        # emo = model.classes_[np.argmax(probs)]
-        # probababilities = dict(zip(model.classes_, (probs * 100).round(2)))
-
-        # print(f"[testAction] Model emotion prediction: {top[0][0].upper()}")
-        # for label, prob in top:
-        #     print(f"[testAction] {label}: {round(prob*100, 2)}%")
     else:
         print(f"File {audio_file_path} does not exist.")
 

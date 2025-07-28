@@ -3,13 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Microphone App</title>
+    <title>Microphone App!!!</title>
     <script src="{{ url_for('static', filename='js/main.js') }}"></script>
 </head>
 <body>
     <button id="recordButton">Hold to Record</button>
     <p>Predicted Emotion: <div id="detectedEmotion">Please Record</div></p>
-    <p>Probabilities: <div id="detectedProbabilities">{}</div></p>
+    <p>All Emotions: <div id="allEmotions">{}</div></p>
+    <p>Vibration: <div id="vibration"></div></p>
     <button id="killButton">Stop Server</button>
     <button id="testButton">Test</button>
 </body>

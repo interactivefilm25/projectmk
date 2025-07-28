@@ -63,22 +63,15 @@ const openWebSocket = () => {
         if (event.data instanceof Blob) {
             data = await event.data.text()
             console.log("Received Blob data from server", data)
-
-            document.getElementById("detectedEmotion").innerText = JSON.parse(data).top
-            document.getElementById("detectedProbabilities").innerText = "Probabilities:\n " + JSON.parse(data).predictions.map(p => `${p.label}: ${p.probability}`).join(",\n ")
+            
+            const json = JSON.parse(data)
+            const topEmotion = json.emotions_sorted[0]
+            
+            document.getElementById("detectedEmotion").innerText = topEmotion.label + " (" + topEmotion.certainty + ")"
+            document.getElementById("allEmotions").innerHTML = "<pre>" + JSON.stringify(json.emotions_sorted, null, 2) + "</pre>"
+            document.getElementById("vibration").innerHTML = json.vibration.mean + " Hz (Frequency: " + json.vibration.frequency + ")"
 
         }
-        // } else {
-        //     data = event.data;
-        // }
-        // console.log("Decoded message:", text)
-
-        // document.getElementById("detectedProbabilities").innerText = JSON.stringify(data, null, 2)
-        // if (text.includes("{")) { // Parse JSON
-        //     const obj = JSON.parse(text); 
-        //     document.getElementById("detectedProbabilities").innerText = "Probabilities: " + JSON.stringify(obj, null, 2);
-        // } else { // Parse text
-        //     document.getElementById("detectedEmotion").innerText = text;
     }
 
     socket.onerror = (error) => {

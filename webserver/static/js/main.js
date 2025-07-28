@@ -63,9 +63,11 @@ const openWebSocket = () => {
         if (event.data instanceof Blob) {
             data = await event.data.text()
             console.log("Received Blob data from server", data)
+            console.log(JSON.parse(data).emotion)
 
-            document.getElementById("detectedEmotion").innerText = JSON.parse(data).top
-            document.getElementById("detectedProbabilities").innerText = "Probabilities:\n " + JSON.parse(data).predictions.map(p => `${p.label}: ${p.probability}`).join(",\n ")
+            document.getElementById("detectedEmotion").innerText = JSON.parse(data).emotion + " (" + JSON.parse(data).confidence + ")"
+            
+            // document.getElementById("detectedProbabilities").innerText = "Probabilities:\n " + JSON.parse(data).all_probabilities.map(p => `${p.label}: ${p.prediction}`).join(",\n ")
 
         }
     }

@@ -70,7 +70,6 @@ const openWebSocket = () => {
             document.getElementById("detectedEmotion").innerText = topEmotion.label + " (" + topEmotion.certainty + ")"
             document.getElementById("allEmotions").innerHTML = "<pre>" + JSON.stringify(json.emotions_sorted, null, 2) + "</pre>"
             document.getElementById("vibration").innerHTML = json.vibration.mean + " Hz (Frequency: " + json.vibration.frequency + ")"
-
         }
     }
 

@@ -98,7 +98,7 @@ async def predict():
         ranked = sorted(zip(labels, probs), key=lambda x: x[1], reverse=True)
 
         emotion_probabilities = [
-            {"label": lbl, "prediction": round(float(p), 2)}
+            {"label": lbl, "certainty": round(float(p), 2)}
             for lbl, p in sorted(ranked, key=lambda x: x[1], reverse=True)
         ]
 

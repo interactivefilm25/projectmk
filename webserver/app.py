@@ -99,6 +99,9 @@ def map_vibration(f0_hz: float) -> str:
     return "alarm/chaos (>500 Hz)"
 
 async def predict():
+    import time
+    start_time = time.time()
+
     if os.path.exists(audio_file_path):
         features = smile.process_file(audio_file_path)
         expected_features = model.feature_names_in_
@@ -130,6 +133,10 @@ async def predict():
             }
         }
         print(result)
+    
+        end_time = time.time()
+        print(f"[predict] Processing time: {end_time - start_time:.3f} seconds")
+    
         await websocket.send(json.dumps(result).encode())
     else:
         print(f"[predict] File {audio_file_path} does not exist.")

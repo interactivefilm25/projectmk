@@ -9,6 +9,14 @@ The initial prototype of Ascending Intelligence will focus on the integration of
 - [TouchDesigner v2023.12370](https://derivative.ca/download) (Non-Commercial is suitable for testing, Developed on the Commercial License)
 - [Python 3.11.9](https://www.python.org/downloads/)
 
+## Note - Windows Powershell
+
+If you are operating on Windows Powershell and it requires an Execution Policy:
+- Start Menu > Windows Powershell > Right-Click > Open with Administrator Priveledges
+- `Set-ExecutionPolicy RemoteSigned -Scope CurrentUser`
+- Close Powershell
+- Open Powershell with regular permissions (`./venv/Scripts/activate` should work now)
+
 ### Documents
 
 - [Trello](https://trello.com/b/pRlLVtaa/ascending-intelligence-cg2-project-plan)
@@ -23,7 +31,9 @@ The initial prototype of Ascending Intelligence will focus on the integration of
 4. `cd` into the downloaded repo
 5. In Terminal create the Virtual Environment
     1. `python -m venv venv`
-    2. `./venv/Scripts/activate` to activate the Virtual Environment
+    2. 
+        1. Windows - `./venv/Scripts/activate` to activate the Virtual Environment
+        2. Mac OS - `source venv/bin/activate`
     3. `pip install -r requirements.txt`
     4. Install the PyTorch version that matches [your system](https://pytorch.org/get-started/locally/)
         1. If you do not have a GPU, select Stable, Pip, Python, CPU

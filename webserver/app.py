@@ -42,11 +42,12 @@ async def upload_audio():
 @app.websocket("/ws")
 async def audio_stream():
     audio_data = []
+    recording_started = False
 
     while True:
         data = await websocket.receive()
         # print(f"Received initial data: {data}")
-        
+
         if data == "PING":
             continue
 
@@ -61,6 +62,9 @@ async def audio_stream():
             print(f"Saved concatenated audio to {audio_file_path} at 16kHz")
 
             await predict()
+            # Reset for next recording
+            audio_data = []
+            recording_started = False
 
         elif data == "KILL":
             os._exit(0)
@@ -69,6 +73,15 @@ async def audio_stream():
             await testAction()
 
         else: # Process audio data
+            if not recording_started:
+                # On first chunk, delete the old wav file if it exists
+                if os.path.exists(audio_file_path):
+                    try:
+                        os.remove(audio_file_path)
+                        print(f"Deleted old {audio_file_path}")
+                    except Exception as e:
+                        print(f"Could not delete {audio_file_path}: {e}")
+                recording_started = True
             print(f"Received data chunk of size {len(data)} bytes")
             audio_data.append(data)
 

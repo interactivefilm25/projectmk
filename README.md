@@ -46,6 +46,10 @@ If you are operating on Windows Powershell and it requires an Execution Policy:
     4. Print venv Report (Upon success you should see a list of the installed Python Libraries, including OpenSMILE)
 8. Change to your Git Branch - `git checkout -b dev-[initials]`
 9. Copy the `.env_template` file to `.env` and place your API Keys in this file. Do not commit this to the repo. 
+10. Windows Developer Mode
+    1. Windows > Settings
+    2. Search for Developer Mode
+    3. Toggle On
 
 ### Web Setup
 

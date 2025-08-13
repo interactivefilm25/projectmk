@@ -50,6 +50,11 @@ If you are operating on Windows Powershell and it requires an Execution Policy:
     1. Windows > Settings
     2. Search for Developer Mode
     3. Toggle On
+11. Install PM2 for Uptime Monitoring
+    1. `npm install pm2 -g`
+    2. View PM2 Logs `pm2 logs AscendingIntelligenceTouchDesigner`
+    3. `pm2 startup`
+    4. `pm2 save`
 
 ### Web Setup
 

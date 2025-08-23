@@ -26,8 +26,6 @@ def onCycleEndAlert(timerOp, segment, cycle, alertSegment, alertDone, interrupt)
 	return
 	
 def onCycle(timerOp, segment, cycle):
-	print("onDone")
-	
 	audio_chop = op('audioBuffer')
 	
 	numpy_array = audio_chop.numpyArray()[0].copy()

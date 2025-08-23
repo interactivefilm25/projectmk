@@ -3,6 +3,7 @@ import queue
 import time
 import datetime
 import numpy as np
+import json
 
 _manager_instance = None
 
@@ -63,11 +64,16 @@ class EmotionPredictor:
                 start_time = time.time()
             
                 result = predict_func(audio_array, sample_rate)
-            
+                print(result)
+
                 end_time = time.time()
                 duration = end_time - start_time
                 print(f"Worker: Finished chunk {chunk_id} in {duration:.2f}s. Result: {result}")
-                self.results.put({'chunk_id': chunk_id, 'emotion': result, 'duration': duration})
+                self.results.put({
+                    "chunk_id": chunk_id, 
+                    "result": result, 
+                    "duration": duration
+                })
                 self.tasks.task_done()
                 chunk_id += 1
             except Exception as e:
@@ -97,7 +103,9 @@ class EmotionPredictor:
 
             results_table = op('results_table')
             timestamp = datetime.datetime.now().strftime('%H:%M:%S')
-            results_table.appendRow([result['chunk_id'], result['emotion'], timestamp, f"{result['duration']:.2f}"])
+            emotion_json = json.dumps(result['result'], ensure_ascii=False)
+            print(f"Main Thread: Appending result to table -> {emotion_json}")
+            results_table.appendRow([result['chunk_id'], emotion_json, timestamp, f"{result['duration']:.2f}"])
 
             self.results.task_done()
         except queue.Empty:

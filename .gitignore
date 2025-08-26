@@ -44,3 +44,6 @@ Backup/
 *.*.toe
 .env
 webserver/uploads/*
+touchdesigner/media/*
+touchdesigner/temp_audio/*
+touchdesigner/venv/*

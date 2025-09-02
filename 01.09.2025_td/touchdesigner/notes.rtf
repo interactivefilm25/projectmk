@@ -1,0 +1,27 @@
+{\rtf1\ansi\ansicpg1252\cocoartf2822
+\cocoatextscaling0\cocoaplatform0{\fonttbl\f0\fswiss\fcharset0 Helvetica;}
+{\colortbl;\red255\green255\blue255;}
+{\*\expandedcolortbl;;}
+\margl1440\margr1440\vieww11520\viewh8400\viewkind0
+\pard\tx720\tx1440\tx2160\tx2880\tx3600\tx4320\tx5040\tx5760\tx6480\tx7200\tx7920\tx8640\pardirnatural\partightenfactor0
+
+\f0\fs24 \cf0 python version: 3.11.2\
+touchdesigner 2023.12370\
+i\'92m using the noncommercial version so text output is 1280x1280\
+osc port 5005\
+\
+pressing issues:\
+\
+when participants are prompted, touchdesigner audio input is turned on and listens for a response - there is a threshold (that will most likely need to be tweaked), that will wait for seven seconds of silence - if there is no response within the seven seconds, the installation continues without input\
+\
+no blob detection - as of now keyboard presses begin the interaction: (admittedly a little wonky)\
+\
+key0 plays the ambient loop \
+key1 plays preps the introduction and begins the experience\
+\
+i\'92ve tried to implement logic that will play each video in a scene twice, but it\'92s fairly inconsistent\
+\
+i\'92ve not implemented left/right projection output nor have i implemented any fonts, images for prompts, translation, etc.\
+\
+** last minute change **\
+the intro scenes were in the wrong order and i\'92ve just corrected it. however, i\'92m attempting to trigger the prompt from the last frame of the movie by using movie -> intro -> last frame, but it seems that there may be an earlier trigger? the prompt sometimes appears during the middle of the scene. the python script is located  in the intro section chopexec1}

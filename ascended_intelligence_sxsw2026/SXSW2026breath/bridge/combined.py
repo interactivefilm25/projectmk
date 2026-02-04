@@ -1,5 +1,5 @@
 """
-Bridge: combined BreathDetector (OpenSMILE) + Wav2Vec2 emotion model.
+Bridge: combined BreathDetector (OpenSMILE) + emotion2vec emotion model.
 Runs both pipelines on the same audio and returns both results per segment.
 No ensemble — both outputs are kept separate per PDF specification.
 OSC output is handled by bridge/osc.py.
@@ -38,6 +38,7 @@ EMOTION_BPM_FALLBACK = {
     "angry": 32.0,
     "fear": 32.0,
     "happy": 24.0,
+    "surprised": 24.0,
     "disgust": 22.0,
     "neutral": 22.0,  # → slightly_elevated, not calm
     "sad": 18.0,

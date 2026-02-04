@@ -19,7 +19,21 @@ OSC_ENABLED = True           # Set to False to disable OSC
 OSC_IP = "127.0.0.1"         # TouchDesigner IP
 OSC_PORT = 5005              # TouchDesigner port
 
-# Emotion to integer mapping for TouchDesigner
+# Emotion to integer mapping (realtime_emotion_td.py format for TouchDesigner)
+# anger_fear=0, joy_excited=1, sadness=2, curious_reflective=3, calm_content=4, unknown=-1
+# Maps emotion2vec labels -> realtime 0-4
+EMOTION_MAP_REALTIME = {
+    "angry": 0,      # anger_fear
+    "fear": 0,       # anger_fear
+    "happy": 1,      # joy_excited
+    "surprised": 1,  # joy_excited
+    "sad": 2,        # sadness
+    "disgust": 3,    # curious_reflective
+    "neutral": 4,    # calm_content
+    "unknown": -1,
+}
+
+# Legacy 8-label map (kept for reference)
 EMOTION_MAP = {
     "angry": 0,
     "disgust": 1,
@@ -31,7 +45,7 @@ EMOTION_MAP = {
     "unknown": -1,
 }
 
-# Breath state to integer mapping
+# Breath state to integer mapping (used internally, not sent in realtime format)
 BREATH_STATE_MAP = {
     "calm": 0,
     "slightly_elevated": 1,
@@ -43,12 +57,11 @@ BREATH_STATE_MAP = {
 class OSCClient:
     """
     Singleton OSC client for sending emotion/breath data to TouchDesigner.
+    Uses same format as realtime_emotion_td.py:
     
     OSC Messages:
-      /emotion   - emotion as integer (0-6, -1=unknown)
+      /emotion   - emotion as integer (0-4: anger_fear, joy_excited, sadness, curious_reflective, calm_content; -1=unknown)
       /frequency - F0 normalized to 0.0-1.0 (50-400Hz vocal range)
-      /breath    - breath state as integer (0-3)
-      /bpm       - breath BPM normalized to 0.0-1.0 (10-40 BPM range)
     """
     _instance = None
     
@@ -81,20 +94,21 @@ class OSCClient:
     
     def send(self, emotion: str, confidence: float, f0: float, breath_state: str, breath_bpm: float):
         """
-        Send emotion and breath data via OSC.
+        Send emotion and frequency via OSC (realtime_emotion_td.py format).
+        Only /emotion and /frequency are sent, matching TouchDesigner expectations.
         
         Args:
-            emotion: Emotion name (e.g., "happy", "angry")
-            confidence: Confidence score (0.0-1.0)
+            emotion: Emotion name from emotion2vec (e.g., "happy", "angry")
+            confidence: Confidence score (0.0-1.0) (unused, for API compatibility)
             f0: Fundamental frequency in Hz
-            breath_state: Breath state label (e.g., "High anxiety", "Calm and relaxed")
-            breath_bpm: Breath rate in BPM
+            breath_state: Breath state label (unused, for API compatibility)
+            breath_bpm: Breath rate in BPM (unused, for API compatibility)
         """
         if not self._ensure_initialized():
             return
         try:
-            # Emotion as integer
-            emotion_int = EMOTION_MAP.get(emotion.lower(), -1)
+            # Emotion as integer (0-4, same as realtime_emotion_td.py)
+            emotion_int = EMOTION_MAP_REALTIME.get(emotion.lower(), -1)
             self._client.send_message("/emotion", emotion_int)
             
             # Normalized frequency (50-400Hz range -> 0.0-1.0)
@@ -103,20 +117,6 @@ class OSCClient:
             else:
                 freq_norm = 0.0
             self._client.send_message("/frequency", freq_norm)
-            
-            # Breath state as integer
-            breath_key = breath_state.lower().replace(" ", "_").replace("and_", "")
-            if breath_key == "calm_relaxed":
-                breath_key = "calm"
-            breath_int = BREATH_STATE_MAP.get(breath_key, 1)
-            self._client.send_message("/breath", breath_int)
-            
-            # Breath BPM normalized (10-40 BPM range -> 0.0-1.0)
-            if breath_bpm > 0:
-                bpm_norm = max(0.0, min(1.0, (breath_bpm - 10) / (40 - 10)))
-            else:
-                bpm_norm = 0.5
-            self._client.send_message("/bpm", bpm_norm)
             
         except Exception:
             pass  # Silently ignore OSC errors
@@ -165,6 +165,6 @@ def get_osc_info() -> dict:
         "enabled": OSC_ENABLED,
         "ip": OSC_IP,
         "port": OSC_PORT,
-        "emotion_map": EMOTION_MAP,
+        "emotion_map": EMOTION_MAP_REALTIME,
         "breath_state_map": BREATH_STATE_MAP,
     }

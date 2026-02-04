@@ -2,6 +2,7 @@
 Bridge: combined BreathDetector (OpenSMILE) + Wav2Vec2 emotion model.
 Runs both pipelines on the same audio and returns both results per segment.
 No ensemble — both outputs are kept separate per PDF specification.
+OSC output is handled by bridge/osc.py.
 Use test_recorded_audio.py to test.
 """
 
@@ -9,6 +10,9 @@ import sys
 from pathlib import Path
 
 import numpy as np
+
+# Import OSC client from separate module
+from .osc import osc_client, configure_osc
 
 # Project root and ascended path
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -81,6 +85,27 @@ BREATH_STATE_TO_TARGET_HZ = {
 }
 
 
+def prepare_audio(waveform: np.ndarray, sample_rate: int) -> np.ndarray:
+    """
+    Clean and enhance audio for emotion model.
+    - Denoise (DeepFilterNet2 or noisereduce)
+    - Enhance (rumble filter + noise reduction + peak norm)
+    """
+    from english_model.noise_model import enhance_audio
+
+    # 1. Denoise (optional - may fail if DeepFilterNet not available)
+    try:
+        from english_model import get_noise_cleaner
+        cleaner = get_noise_cleaner()
+        waveform = cleaner.clean(waveform, sample_rate, target_sr=48000)
+    except Exception:
+        pass
+
+    # 2. Always enhance (rumble filter + light NR + normalize)
+    waveform = enhance_audio(waveform, sample_rate)
+    return waveform
+
+
 def load_audio(audio_path: Path | str, max_sec: float | None = None) -> tuple[np.ndarray, int]:
     """Load audio file to float32 mono at TARGET_SR. Returns (waveform, sample_rate)."""
     audio_path = Path(audio_path)
@@ -115,6 +140,7 @@ def run_combined(
     segment_duration: float | None = None,
     full_audio_emotion: bool = True,
     source: str = "file",
+    clean_audio: bool = True,
 ) -> list[dict]:
     """
     Run both BreathDetector and Audio2Emotion on the same audio.
@@ -124,6 +150,7 @@ def run_combined(
     full_audio_emotion: If True, run emotion model on the entire audio once (default).
     source: "file" (default) or "live". When "live" and audio > 5s, use segment-based
             emotion (pick most confident 3s window) to handle mic/playback degradation.
+    clean_audio: If True, run DeepFilterNet2 noise cleaning (downloads from HF locally).
 
     Returns list of segment dicts:
       - start_time, end_time
@@ -146,6 +173,10 @@ def run_combined(
     else:
         raise ValueError("Pass either audio_path or (waveform, sample_rate)")
 
+    # Optional: clean + enhance (gentle, preserves quality)
+    if clean_audio:
+        waveform = prepare_audio(waveform, sample_rate)
+
     from ascended.breath_detector import BreathDetector
     from english_model import get_model
 
@@ -159,51 +190,20 @@ def run_combined(
         segment_duration = duration
     num_segments = max(1, int(np.ceil(duration / segment_duration)))
 
-    # Run emotion model
+    # Run emotion model on full audio
     a2e_probs_full = None
     a2e_dominant_full = None
     if full_audio_emotion:
-        duration_sec = len(waveform) / sample_rate
         min_samples = 32000
-        # For live mic: use segment-based emotion when audio is long; degraded playback
-        # often gets "neutral" on full clip but clearer segments may retain emotion
-        if source == "live" and duration_sec >= 5.0:
-            seg_len = int(3.0 * sample_rate)
-            neutral_idx = emotions_a2e.index("neutral")
-            best_probs = None
-            best_non_neutral_conf = -1.0
-            fallback_probs = fallback_dominant = None
-            for start in range(0, len(waveform), seg_len):
-                chunk = waveform[start : start + seg_len].astype(np.float32)
-                if len(chunk) < min_samples:
-                    chunk = np.pad(
-                        chunk, (0, min_samples - len(chunk)),
-                        mode="constant", constant_values=0,
-                    )
-                probs, pred_idx = model.infer(chunk)
-                pred_emotion = emotions_a2e[pred_idx]
-                non_neutral_conf = float(max(probs[i] for i in range(len(probs)) if i != neutral_idx))
-                if pred_emotion != "neutral" and non_neutral_conf > best_non_neutral_conf:
-                    best_non_neutral_conf = non_neutral_conf
-                    best_probs = probs
-                    a2e_dominant_full = pred_emotion
-                if fallback_probs is None:
-                    fallback_probs, fallback_dominant = probs, pred_emotion
-            if best_probs is not None:
-                a2e_probs_full = {emotions_a2e[i]: float(best_probs[i]) for i in range(len(emotions_a2e))}
-            elif fallback_probs is not None:
-                a2e_probs_full = {emotions_a2e[i]: float(fallback_probs[i]) for i in range(len(emotions_a2e))}
-                a2e_dominant_full = fallback_dominant
-        if a2e_probs_full is None:
-            full_chunk = waveform.astype(np.float32)
-            if len(full_chunk) < min_samples:
-                full_chunk = np.pad(
-                    full_chunk, (0, min_samples - len(full_chunk)),
-                    mode="constant", constant_values=0,
-                )
-            probs, pred_idx = model.infer(full_chunk)
-            a2e_dominant_full = emotions_a2e[pred_idx]
-            a2e_probs_full = {emotions_a2e[i]: float(probs[i]) for i in range(len(emotions_a2e))}
+        full_chunk = waveform.astype(np.float32)
+        if len(full_chunk) < min_samples:
+            full_chunk = np.pad(
+                full_chunk, (0, min_samples - len(full_chunk)),
+                mode="constant", constant_values=0,
+            )
+        probs, pred_idx = model.infer(full_chunk)
+        a2e_dominant_full = emotions_a2e[pred_idx]
+        a2e_probs_full = {emotions_a2e[i]: float(probs[i]) for i in range(len(emotions_a2e))}
 
     # Process breath in 100ms chunks (full audio, in order)
     chunk_size = detector.chunk_size
@@ -265,16 +265,6 @@ def run_combined(
             a2e_dominant = emotions_a2e[pred_idx]
             a2e_probs = {emotions_a2e[i]: float(probs[i]) for i in range(len(emotions_a2e))}
 
-        # Calm override: low F0 + happy → treat as calm/neutral (emotion2vec often maps calm to happy)
-        F0_CALM_THRESHOLD_HZ = 120.0
-        if a2e_dominant == "happy" and breath_f0 > 0 and breath_f0 < F0_CALM_THRESHOLD_HZ:
-            a2e_dominant = "neutral"
-            a2e_probs = dict(a2e_probs)
-            neutral_p = a2e_probs.get("neutral", 0)
-            happy_p = a2e_probs.get("happy", 0)
-            a2e_probs["neutral"] = max(neutral_p, happy_p)
-            a2e_probs["happy"] = min(neutral_p, happy_p)
-
         # Use emotion-based BPM fallback when detector returns 0
         breath_bpm = _bpm_fallback(breath_bpm_raw, a2e_dominant)
 
@@ -283,7 +273,7 @@ def run_combined(
         primary_emotion = BREATH_STATE_LABELS[breath_dominant]
         target_hz = BREATH_STATE_TO_TARGET_HZ[breath_dominant]
 
-        combined.append({
+        segment_result = {
             "start_time": start_time,
             "end_time": end_time,
             "breath_emotion": breath_dominant,
@@ -293,6 +283,17 @@ def run_combined(
             "breath_bpm": breath_bpm,
             "audio2emotion_emotion": a2e_dominant,
             "audio2emotion_probs": a2e_probs,
-        })
+        }
+        combined.append(segment_result)
+        
+        # Send via OSC
+        top_confidence = max(a2e_probs.values()) if a2e_probs else 0.0
+        osc_client.send(
+            emotion=a2e_dominant,
+            confidence=top_confidence,
+            f0=breath_f0,
+            breath_state=primary_emotion,
+            breath_bpm=breath_bpm,
+        )
 
     return combined

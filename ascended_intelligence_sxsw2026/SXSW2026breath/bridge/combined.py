@@ -86,25 +86,22 @@ BREATH_STATE_TO_TARGET_HZ = {
 }
 
 
-def prepare_audio(waveform: np.ndarray, sample_rate: int) -> np.ndarray:
+def prepare_audio(waveform: np.ndarray, sample_rate: int, gentle: bool = False) -> np.ndarray:
     """
-    Clean and enhance audio for emotion model.
-    - Denoise (DeepFilterNet2 or noisereduce)
-    - Enhance (rumble filter + noise reduction + peak norm)
-    """
-    from english_model.noise_model import enhance_audio
+    Denoise audio using AI (DeepFilterNet2) only. No manual processing.
 
-    # 1. Denoise (optional - may fail if DeepFilterNet not available)
+    gentle=True (live mic): Skip denoising, return waveform unchanged.
+    gentle=False (recorded file): Run DeepFilterNet2. If unavailable, return unchanged.
+    """
+    if gentle:
+        return waveform.astype(np.float32)
+
     try:
         from english_model import get_noise_cleaner
         cleaner = get_noise_cleaner()
-        waveform = cleaner.clean(waveform, sample_rate, target_sr=48000)
+        return cleaner.clean(waveform, sample_rate, target_sr=48000)
     except Exception:
-        pass
-
-    # 2. Always enhance (rumble filter + light NR + normalize)
-    waveform = enhance_audio(waveform, sample_rate)
-    return waveform
+        return waveform.astype(np.float32)
 
 
 def load_audio(audio_path: Path | str, max_sec: float | None = None) -> tuple[np.ndarray, int]:
@@ -265,6 +262,10 @@ def run_combined(
             probs, pred_idx = model.infer(chunk)
             a2e_dominant = emotions_a2e[pred_idx]
             a2e_probs = {emotions_a2e[i]: float(probs[i]) for i in range(len(emotions_a2e))}
+
+        # Override: low-F0 "happy" often indicates calm speech (e.g. Calm Nigel.wav)
+        if a2e_dominant == "happy" and 0 < breath_f0 < 130:
+            a2e_dominant = "neutral"
 
         # Use emotion-based BPM fallback when detector returns 0
         breath_bpm = _bpm_fallback(breath_bpm_raw, a2e_dominant)

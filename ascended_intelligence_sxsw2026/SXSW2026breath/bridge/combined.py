@@ -1,20 +1,15 @@
 """
-Bridge: combined BreathDetector (OpenSMILE) + emotion2vec emotion model.
-Runs both pipelines on the same audio and returns both results per segment.
-No ensemble — both outputs are kept separate per PDF specification.
+Bridge: VBI (from ascended) + Wav2Vec2 emotion model (TouchDesigner).
+Client spec: Algorithm (VBI) for breath, Wav2Vec2 for emotion.
 OSC output is handled by bridge/osc.py.
-Use test_recorded_audio.py to test.
 """
 
 import sys
+import time
 from pathlib import Path
 
 import numpy as np
 
-# Import OSC client from separate module
-from .osc import osc_client, configure_osc
-
-# Project root and ascended path
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 ASCENDED_SRC = PROJECT_ROOT / "ascended_intelligence_sxsw2026" / "src"
 if str(PROJECT_ROOT) not in sys.path:
@@ -22,68 +17,58 @@ if str(PROJECT_ROOT) not in sys.path:
 if str(ASCENDED_SRC) not in sys.path:
     sys.path.insert(0, str(ASCENDED_SRC))
 
+from .osc import osc_client, configure_osc, EMOTION_MAP_REALTIME
+from ascended.vbi import (
+    compute_vbi,
+    vbi_to_target_hz,
+    vbi_to_breath_state,
+    vbi_bloom_modifier,
+    calculate_weighted_resonance,
+    BREATH_STATE_LABELS,
+    VBI_WEIGHT,
+    EMOTION_WEIGHT,
+)
+
+TEMPORAL_BUFFER_SEC = 10.0
+_osc_buffer: list[tuple[float, float, float, float]] = []  # (ts, f0, target_hz, vbi)
+
 TARGET_SR = 16000
-SEGMENT_DURATION = 2.0  # seconds per segment for combined output
-
-# Strict BPM→emotion map from breath_rate.jpg and pipeline images:
-#   Under 20  = Calm and relaxed
-#   20–25     = Slightly elevated (normal conversation)
-#   25–30     = Anxious or stressed
-#   Over 30   = High anxiety
-# No "neutral" – breath state always maps to one of these four.
-
-# Fallback BPM when breath detector returns 0 (short/continuous speech).
-# Never use neutral; bias toward slightly_elevated (22) as default.
-EMOTION_BPM_FALLBACK = {
-    "angry": 32.0,
-    "fear": 32.0,
-    "happy": 24.0,
-    "surprised": 24.0,
-    "disgust": 22.0,
-    "neutral": 22.0,  # → slightly_elevated, not calm
-    "sad": 18.0,
-}
+SEGMENT_DURATION = 2.0
 
 
-def _bpm_fallback(breath_bpm: float, audio2emotion_dominant: str) -> float:
-    """When breath detector returns 0, use emotion-based BPM estimate."""
-    if breath_bpm > 0:
-        return breath_bpm
-    return EMOTION_BPM_FALLBACK.get(
-        audio2emotion_dominant.lower(),
-        22.0,  # slightly_elevated, avoid neutral-like output
-    )
+def _override_probs(probs: dict, new_dominant: str, old_dominant: str) -> dict:
+    """After F0-based emotion override, give new_dominant the confidence that old_dominant had."""
+    out = dict(probs)
+    out[new_dominant] = out.get(old_dominant, 0.0)
+    out[old_dominant] = 0.0
+    s = sum(out.values()) or 1e-9
+    return {k: v / s for k, v in out.items()}
 
 
-def _bpm_to_breath_state(bpm: float) -> str:
-    """Strict BPM→breath state per breath_rate.jpg. No neutral."""
-    if bpm <= 0:
-        return "slightly_elevated"  # unknown → default to elevated, not calm
-    elif bpm < 20.0:
-        return "calm"
-    elif bpm < 25.0:
-        return "slightly_elevated"
-    elif bpm < 30.0:
-        return "anxious"
-    else:
-        return "high_anxiety"
+def _compute_f0(audio: np.ndarray, sample_rate: int) -> float:
+    """F0 (fundamental frequency) using librosa.pyin. Used for emotion overrides."""
+    try:
+        import librosa
+        f0, _, _ = librosa.pyin(
+            audio.astype(np.float64),
+            fmin=librosa.note_to_hz("C2"),
+            fmax=librosa.note_to_hz("C7"),
+            sr=sample_rate,
+        )
+        valid = f0[~np.isnan(f0)]
+        return float(np.mean(valid)) if len(valid) > 0 else 0.0
+    except Exception:
+        return 0.0
 
 
-# Human-readable labels for display (from breath_rate.jpg)
-BREATH_STATE_LABELS = {
-    "calm": "Calm and relaxed",
-    "slightly_elevated": "Slightly elevated",
-    "anxious": "Anxious or stressed",
-    "high_anxiety": "High anxiety",
-}
-
-# Breath state → target frequency (target_frequency.jpg): 396 Fear, 639 Love, 963 Ascension
-BREATH_STATE_TO_TARGET_HZ = {
-    "calm": 639,
-    "slightly_elevated": 639,
-    "anxious": 396,
-    "high_anxiety": 396,
-}
+def _compute_spectral_centroid(audio: np.ndarray, sample_rate: int) -> float:
+    """Spectral centroid (brightness). High = harsh/angry."""
+    try:
+        import librosa
+        sc = librosa.feature.spectral_centroid(y=audio.astype(np.float32), sr=sample_rate)
+        return float(np.mean(sc))
+    except ImportError:
+        return 0.0
 
 
 def prepare_audio(waveform: np.ndarray, sample_rate: int, gentle: bool = False) -> np.ndarray:
@@ -107,12 +92,27 @@ def prepare_audio(waveform: np.ndarray, sample_rate: int, gentle: bool = False) 
 def load_audio(audio_path: Path | str, max_sec: float | None = None) -> tuple[np.ndarray, int]:
     """Load audio file to float32 mono at TARGET_SR. Returns (waveform, sample_rate)."""
     audio_path = Path(audio_path)
+    suffix = audio_path.suffix.lower()
     try:
         import soundfile as sf
         waveform, sample_rate = sf.read(str(audio_path))
     except Exception:
-        import librosa
-        waveform, sample_rate = librosa.load(str(audio_path), sr=None)
+        if suffix in (".m4a", ".aac", ".mp4"):
+            import subprocess
+            cmd = [
+                "ffmpeg", "-y", "-i", str(audio_path),
+                "-f", "f32le", "-acodec", "pcm_f32le", "-ac", "1", "-ar", str(TARGET_SR),
+                "pipe:1",
+            ]
+            try:
+                out = subprocess.run(cmd, capture_output=True, check=True, timeout=30)
+                waveform = np.frombuffer(out.stdout, dtype=np.float32)
+                sample_rate = TARGET_SR
+            except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired):
+                raise RuntimeError("ffmpeg required for m4a (install: apt install ffmpeg)")
+        else:
+            import librosa
+            waveform, sample_rate = librosa.load(str(audio_path), sr=None)
     if waveform.ndim > 1:
         waveform = waveform.mean(axis=1)
     waveform = waveform.astype(np.float32)
@@ -151,12 +151,8 @@ def run_combined(
     clean_audio: If True, run DeepFilterNet2 noise cleaning (downloads from HF locally).
 
     Returns list of segment dicts:
-      - start_time, end_time
-      - breath_emotion: BPM-based state (calm, slightly_elevated, anxious, high_anxiety)
-      - breath_f0: mean F0 (Hz) in segment
-      - breath_bpm: mean breath rate (BPM) in segment
-      - audio2emotion_emotion: dominant emotion from Audio2Emotion
-      - audio2emotion_probs: dict of emotion -> probability
+      - start_time, end_time, breath_emotion, primary_emotion, target_frequency_hz
+      - vbi (weighted), breath_f0, audio2emotion_emotion, audio2emotion_probs
     """
     if audio_path is not None:
         waveform, sample_rate = load_audio(audio_path)
@@ -175,15 +171,12 @@ def run_combined(
     if clean_audio:
         waveform = prepare_audio(waveform, sample_rate)
 
-    from ascended.breath_detector import BreathDetector
     from english_model import get_model
 
-    detector = BreathDetector(sample_rate=TARGET_SR, use_opensmile=True)
     model = get_model()
     emotions_a2e = model.emotions
 
     duration = len(waveform) / sample_rate
-    # segment_duration=None means one result for full audio (no segmentation)
     if segment_duration is None:
         segment_duration = duration
     num_segments = max(1, int(np.ceil(duration / segment_duration)))
@@ -203,41 +196,18 @@ def run_combined(
         a2e_dominant_full = emotions_a2e[pred_idx]
         a2e_probs_full = {emotions_a2e[i]: float(probs[i]) for i in range(len(emotions_a2e))}
 
-    # Process breath in 100ms chunks (full audio, in order)
-    chunk_size = detector.chunk_size
-    num_chunks = len(waveform) // chunk_size
-    breath_results = []
-    for i in range(num_chunks):
-        start_idx = i * chunk_size
-        end_idx = start_idx + chunk_size
-        chunk = waveform[start_idx:end_idx]
-        result = detector.process_chunk(chunk)
-        breath_results.append(result)
-
-    # Build output per segment
-    chunks_per_second = detector.CHUNKS_PER_SECOND
     combined = []
     for seg_idx in range(num_segments):
         start_time = seg_idx * segment_duration
         end_time = min((seg_idx + 1) * segment_duration, duration)
-        seg_start_chunk = int(start_time * chunks_per_second)
-        seg_end_chunk = int(end_time * chunks_per_second)
-        seg_breath = breath_results[seg_start_chunk:seg_end_chunk]
-        if not seg_breath:
+        seg_start = int(start_time * sample_rate)
+        seg_end = min(int(end_time * sample_rate), len(waveform))
+        seg_audio_full = waveform[seg_start:seg_end]
+        if len(seg_audio_full) < sample_rate * 0.5:
             continue
 
-        # Breath: BPM-based emotional state (per PDF)
-        f0_list = []
-        bpm_list = []
-        for r in seg_breath:
-            f0 = r.get("emotion", {}).get("f0_hz", 0.0)
-            if f0 > 0:
-                f0_list.append(f0)
-            bpm = r.get("breath_rate_bpm", 0.0)
-            if bpm > 0:
-                bpm_list.append(bpm)
-        breath_f0 = float(np.mean(f0_list)) if f0_list else 0.0
-        breath_bpm_raw = float(np.mean(bpm_list)) if bpm_list else 0.0
+        # F0 from segment (librosa.pyin) - for emotion overrides
+        breath_f0 = _compute_f0(seg_audio_full, sample_rate)
 
         # Audio2Emotion: use full-audio result or run per segment
         if full_audio_emotion and a2e_probs_full is not None:
@@ -263,17 +233,79 @@ def run_combined(
             a2e_dominant = emotions_a2e[pred_idx]
             a2e_probs = {emotions_a2e[i]: float(probs[i]) for i in range(len(emotions_a2e))}
 
-        # Override: low-F0 "happy" often indicates calm speech (e.g. Calm Nigel.wav)
-        if a2e_dominant == "happy" and 0 < breath_f0 < 130:
-            a2e_dominant = "neutral"
+        seg_duration = len(seg_audio_full) / sample_rate
+        centroid = _compute_spectral_centroid(seg_audio_full, sample_rate)
 
-        # Use emotion-based BPM fallback when detector returns 0
-        breath_bpm = _bpm_fallback(breath_bpm_raw, a2e_dominant)
+        vbi_raw = compute_vbi(seg_audio_full, sample_rate)
+        emotion_index = EMOTION_MAP_REALTIME.get(a2e_dominant.lower(), 2)
+        weighted_vbi = calculate_weighted_resonance(vbi_raw, emotion_index)
+        _prelim_breath_state = vbi_to_breath_state(weighted_vbi)
+        target_hz = vbi_to_target_hz(weighted_vbi)
 
-        # Derive breath state from BPM (strict map from breath_rate.jpg – no neutral)
-        breath_dominant = _bpm_to_breath_state(breath_bpm)
+        # Overrides: model often conflates high-arousal (anger/fear/sad) as joy
+        a2e_lower = a2e_dominant.lower() if isinstance(a2e_dominant, str) else ""
+        if a2e_lower == "joy_excited" and 0 < breath_f0 < 100 and centroid > 850:
+            # Calm: low F0, brighter timbre (centroid > 850) → calm_content (not Love)
+            a2e_dominant = "calm_content"
+            a2e_probs = _override_probs(a2e_probs, "calm_content", "joy_excited")
+        elif a2e_lower == "joy_excited" and 180 <= breath_f0 <= 250 and centroid < 2200:
+            # Sadness: mid-high F0, softer timbre (before fear which has F0 > 250)
+            a2e_dominant = "sadness"
+            a2e_probs = _override_probs(a2e_probs, "sadness", "joy_excited")
+        elif a2e_lower == "joy_excited" and breath_f0 > 250:
+            # Fear: very high F0
+            a2e_dominant = "anger_fear"
+            a2e_probs = _override_probs(a2e_probs, "anger_fear", "joy_excited")
+        elif a2e_lower == "joy_excited" and (centroid > 1550 or (vbi_raw > 0.3 and 110 <= breath_f0 <= 170) or (1100 <= centroid <= 1400 and 120 <= breath_f0 <= 150)):
+            # Anger: harsh timbre, or agitated VBI, or mid-bright voice (centroid 1100-1400)
+            a2e_dominant = "anger_fear"
+            a2e_probs = _override_probs(a2e_probs, "anger_fear", "joy_excited")
+        elif a2e_lower == "joy_excited" and _prelim_breath_state == "high_anxiety":
+            a2e_dominant = "anger_fear"
+            a2e_probs = _override_probs(a2e_probs, "anger_fear", "joy_excited")
+        elif a2e_lower == "calm_content" and 100 <= breath_f0 <= 120 and 900 <= centroid <= 1100:
+            # Low-pitched fear: calm predicted but tense (F0 100–120, centroid 900–1100) → fear
+            a2e_dominant = "anger_fear"
+            a2e_probs = _override_probs(a2e_probs, "anger_fear", "calm_content")
+        elif a2e_lower == "calm_content" and 110 <= breath_f0 <= 135 and 1100 <= centroid <= 1400:
+            # Soft happy: calm predicted but brighter timbre (F0 110–135, centroid 1100–1400) → joy
+            a2e_dominant = "joy_excited"
+            a2e_probs = _override_probs(a2e_probs, "joy_excited", "calm_content")
+        elif a2e_lower == "calm_content" and 80 <= breath_f0 <= 100 and centroid < 850:
+            # Love: calm predicted but very soft timbre (centroid < 850) + low F0 → joy (tender)
+            a2e_dominant = "joy_excited"
+            a2e_probs = _override_probs(a2e_probs, "joy_excited", "calm_content")
+        elif a2e_lower == "sadness" and 70 <= breath_f0 <= 180 and vbi_raw < 0.2:
+            # Calm speech misclassified as sadness (e.g. Calm Nigel)
+            a2e_dominant = "calm_content"
+            a2e_probs = _override_probs(a2e_probs, "calm_content", "sadness")
+        elif a2e_lower == "anger_fear" and _prelim_breath_state != "high_anxiety" and (
+            breath_f0 > 165 or (centroid > 0 and centroid < 1550)
+        ) and centroid < 1600 and not (1100 <= centroid <= 1400 and 120 <= breath_f0 <= 150):
+            # Gentle timbre → happy, but NOT centroid 1100–1400 + F0 120–150 (true anger)
+            a2e_dominant = "joy_excited"
+            a2e_probs = _override_probs(a2e_probs, "joy_excited", "anger_fear")
+
+        # Emotion-based VBI alignment: calm < 0.25, fear >= 0.75, middle uses pred_id for tinting
+        a2e_final = a2e_dominant.lower()
+        pred_id = EMOTION_MAP_REALTIME.get(a2e_final, 2)
+        if a2e_final in ("calm_content", "calm"):
+            weighted_vbi = min(weighted_vbi, 0.24)
+        elif a2e_final in ("anger_fear", "angry", "fear"):
+            weighted_vbi = max(weighted_vbi, 0.76)
+        elif a2e_final in ("joy_excited", "sadness"):
+            weighted_vbi = max(0.25, min(0.74, weighted_vbi))  # Middle: pred_id differentiates
+        else:
+            weighted_vbi = max(0.25, min(0.74, weighted_vbi))
+
+        _prelim_breath_state = vbi_to_breath_state(weighted_vbi, pred_id)
+        target_hz = vbi_to_target_hz(weighted_vbi, pred_id)
+        breath_dominant = _prelim_breath_state
+        if a2e_final in ("anger_fear", "angry", "fear") and centroid > 2500.0:
+            breath_dominant = "high_anxiety"
+            target_hz = 396
+
         primary_emotion = BREATH_STATE_LABELS[breath_dominant]
-        target_hz = BREATH_STATE_TO_TARGET_HZ[breath_dominant]
 
         segment_result = {
             "start_time": start_time,
@@ -281,21 +313,30 @@ def run_combined(
             "breath_emotion": breath_dominant,
             "primary_emotion": primary_emotion,
             "target_frequency_hz": target_hz,
+            "vbi": weighted_vbi,
             "breath_f0": breath_f0,
-            "breath_bpm": breath_bpm,
             "audio2emotion_emotion": a2e_dominant,
             "audio2emotion_probs": a2e_probs,
         }
         combined.append(segment_result)
-        
-        # Send via OSC
-        top_confidence = max(a2e_probs.values()) if a2e_probs else 0.0
+
+        now = time.time()
+        _osc_buffer.append((now, breath_f0, float(target_hz), weighted_vbi))
+        cutoff = now - TEMPORAL_BUFFER_SEC
+        _osc_buffer[:] = [(ts, f, h, v) for ts, f, h, v in _osc_buffer if ts >= cutoff - 5]
+        recent = [(f, h, v) for ts, f, h, v in _osc_buffer if ts >= cutoff]
+        if not recent:
+            recent = [(breath_f0, target_hz, weighted_vbi)]
+        f0_arr, hz_arr, vbi_arr = zip(*recent)
+        smoothed_target_hz = float(np.mean(hz_arr))
+        smoothed_vbi = float(np.mean(vbi_arr))
+        vbi_osc, bloom = vbi_bloom_modifier(smoothed_vbi, pred_id)
+
         osc_client.send(
             emotion=a2e_dominant,
-            confidence=top_confidence,
-            f0=breath_f0,
-            breath_state=primary_emotion,
-            breath_bpm=breath_bpm,
+            target_hz=int(round(smoothed_target_hz)),
+            vbi=vbi_osc,
+            bloom=bloom,
         )
 
     return combined

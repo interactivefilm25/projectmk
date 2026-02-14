@@ -10,11 +10,12 @@ _SCRIPT_DIR = Path(__file__).resolve().parent
 MODEL_DIR = _SCRIPT_DIR / "model"
 
 # Model names (subfolders under model/)
-EMOTION_MODEL_NAME = "emotion2vec_plus_base"
+# Same as realtime_emotion_td.py / TouchDesigner: Wav2Vec2 5-class emotion model
+EMOTION_MODEL_NAME = "multilingual_emotion_model"
 NOISE_MODEL_NAME = "DeepFilterNet2"
 
-# Hugging Face identifiers
-HF_EMOTION_ID = "emotion2vec/emotion2vec_plus_base"
+# Hugging Face identifiers (no default HF repo for multilingual_emotion_model; place model in model/multilingual_emotion_model/)
+HF_EMOTION_ID = None
 HF_NOISE_REPO = "hshr/DeepFilterNet2"
 
 
@@ -24,7 +25,7 @@ def get_model_dir() -> Path:
 
 
 def get_emotion_model_dir() -> Path:
-    """Return emotion model directory (model/emotion2vec_plus_base/)."""
+    """Return emotion model directory (model/multilingual_emotion_model/)."""
     return MODEL_DIR / EMOTION_MODEL_NAME
 
 
@@ -35,21 +36,22 @@ def get_noise_model_dir() -> Path:
 
 def download_emotion_model() -> Path:
     """
-    Download emotion model to model/emotion2vec_plus_base/.
-    Uses huggingface_hub. Returns path to model dir.
-    Cross-platform.
+    Ensure emotion model directory exists (model/multilingual_emotion_model/).
+    The Wav2Vec2 model used by TouchDesigner/realtime_emotion_td.py has no default
+    HuggingFace repo; place your model files (config.json, pytorch_model.bin or
+    model.safetensors, etc.) in that folder, or set HF_EMOTION_ID and use
+    huggingface_hub to download. Returns path to model dir.
     """
     out_dir = get_emotion_model_dir()
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    try:
-        from huggingface_hub import snapshot_download
-        snapshot_download(
-            repo_id=HF_EMOTION_ID,
-            local_dir=str(out_dir),
-        )
-    except Exception as e:
-        raise RuntimeError(f"download_model: Failed to download emotion model: {e}") from e
+    if HF_EMOTION_ID:
+        try:
+            from huggingface_hub import snapshot_download
+            snapshot_download(repo_id=HF_EMOTION_ID, local_dir=str(out_dir))
+        except Exception as e:
+            raise RuntimeError(f"download_model: Failed to download emotion model: {e}") from e
+    # else: user places model in model/multilingual_emotion_model/ (same as realtime_emotion_td.py)
 
     return out_dir
 

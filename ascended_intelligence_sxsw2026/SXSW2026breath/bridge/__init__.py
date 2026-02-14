@@ -5,4 +5,7 @@
 from .combined import load_audio, run_combined, prepare_audio
 from .osc import osc_client, configure_osc, get_osc_info
 
-__all__ = ["load_audio", "run_combined", "prepare_audio", "osc_client", "configure_osc", "get_osc_info"]
+__all__ = [
+    "load_audio", "run_combined", "prepare_audio",
+    "osc_client", "configure_osc", "get_osc_info",
+]

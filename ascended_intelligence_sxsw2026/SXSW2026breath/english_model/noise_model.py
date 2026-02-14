@@ -1,8 +1,8 @@
 """
-noise_model: Audio noise cleaning + enhancement.
+noise_model: Audio denoising using AI (DeepFilterNet2) only.
 
-- clean(): DeepFilterNet2 or noisereduce fallback (denoise)
-- enhance(): Gentle enhancement that preserves quality (no harsh processing)
+- clean(): DeepFilterNet2 (AI model). If unavailable or fails, returns waveform unchanged.
+- enhance_audio(): No-op (kept for API compatibility). Manual processing removed.
 """
 from pathlib import Path
 from typing import Optional
@@ -13,41 +13,12 @@ from .download_model import get_noise_model_dir, NOISE_MODEL_NAME, HF_NOISE_REPO
 from .load_model import get_noise_model_path
 
 
-def enhance_audio(waveform: np.ndarray, sample_rate: int) -> np.ndarray:
+def enhance_audio(waveform: np.ndarray, sample_rate: int, use_nr: bool = True) -> np.ndarray:
     """
-    Enhance live audio for better clarity.
-    - Rumble filter 50Hz (1st order)
-    - Light noise reduction (prop_decrease=0.4) - runs after clean() for extra polish
-    - Peak normalization to 0.95
+    No-op for API compatibility. Manual enhancement (rumble filter, NR, peak norm) removed.
+    Use NoiseCleaner.clean() for AI-based denoising.
     """
-    audio = waveform.astype(np.float32)
-
-    # 1. Rumble filter
-    try:
-        from scipy import signal
-        nyq = sample_rate / 2
-        hp = 50 / nyq
-        if hp < 1.0:
-            b, a = signal.butter(1, hp, btype="high")
-            audio = signal.filtfilt(b, a, audio).astype(np.float32)
-    except Exception:
-        pass
-
-    # 2. Light noise reduction (audible enhancement for live mic)
-    try:
-        import noisereduce as nr
-        audio = nr.reduce_noise(
-            y=audio, sr=sample_rate,
-            stationary=True, prop_decrease=0.35,
-        ).astype(np.float32)
-    except Exception:
-        pass
-
-    # 3. Peak normalization
-    peak = np.abs(audio).max()
-    if peak > 0.01:
-        audio = audio * (0.95 / peak)
-    return audio
+    return waveform.astype(np.float32)
 
 
 class NoiseCleaner:
@@ -60,19 +31,18 @@ class NoiseCleaner:
         self._enhance_fn = None
         self._resample_fn = None
         self._available = False
-        self._fallback_nr = None
 
     def _ensure_loaded(self) -> bool:
         if self._available:
             return True
-        if self._available is False and self._fallback_nr is not None:
+        if self._available is False:
             return False
 
         try:
             from huggingface_hub import snapshot_download
             import torch
         except ImportError:
-            self._init_fallback()
+            self._available = False
             return False
 
         try:
@@ -101,7 +71,7 @@ class NoiseCleaner:
             return True
 
         except Exception:
-            self._init_fallback()
+            self._available = False
             return False
 
     def _finish_init(self, torch, enhance, resample):
@@ -111,16 +81,10 @@ class NoiseCleaner:
         self._resample_fn = resample
         self._available = True
 
-    def _init_fallback(self):
-        try:
-            import noisereduce as nr
-            self._fallback_nr = nr
-        except ImportError:
-            self._fallback_nr = None  # noisereduce fallback; see noise_model
-
     def clean(self, waveform: np.ndarray, sample_rate: int, target_sr: int = 48000) -> np.ndarray:
+        """Denoise using DeepFilterNet2 (AI). If unavailable or fails, returns waveform unchanged."""
         if not self._ensure_loaded():
-            return self._clean_fallback(waveform, sample_rate)
+            return waveform.astype(np.float32)
 
         try:
             import torch
@@ -133,20 +97,7 @@ class NoiseCleaner:
                 enhanced = self._resample_fn(enhanced, target_sr, sample_rate)
             return enhanced.squeeze().cpu().numpy().astype(np.float32)
         except Exception:
-            return self._clean_fallback(waveform, sample_rate)
-
-    def _clean_fallback(self, waveform: np.ndarray, sample_rate: int) -> np.ndarray:
-        if self._fallback_nr is None:
-            self._init_fallback()
-        if self._fallback_nr is None:
-            return waveform
-        try:
-            return self._fallback_nr.reduce_noise(
-                y=waveform.astype(np.float32), sr=sample_rate,
-                stationary=True, prop_decrease=0.2,  # Gentle to preserve quality
-            ).astype(np.float32)
-        except Exception:
-            return waveform
+            return waveform.astype(np.float32)
 
     @property
     def is_deepfilternet(self) -> bool:

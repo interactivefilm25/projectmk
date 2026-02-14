@@ -155,8 +155,8 @@ The **bridge** (in the project’s `bridge/` package) is the layer that combines
 2. Instantiates **BreathDetector(sample_rate=16000, use_opensmile=True)**.
 3. Slices the waveform into consecutive chunks of **detector.chunk_size**.
 4. Calls **detector.process_chunk(chunk)** for each slice.
-5. Aggregates results over **2 s segments**: for each segment it collects chunk outputs, computes dominant Breath label (from **emotion.top_emotion.label**), mean F0 (from **emotion.f0_hz**), mean BPM, and **breath_emotion_pcts** (only over chunks with **emotion.f0_hz >= 50** so silence does not dominate as Neutral).
-6. Passes these segment-level Breath outputs together with the English model outputs into the Ensemble (final_result).
+5. Aggregates results over **2 s segments**: for each segment it collects chunk outputs, computes dominant Breath label (from **emotion.top_emotion.label**), mean F0 (from **emotion.f0_hz**), mean BPM, and breath state.
+6. Returns these segment-level Breath outputs together with the English model outputs (no ensemble; both outputs kept separate per PDF specification).
 
 So as an **external developer** you normally **do not** call `BreathDetector` directly for the combined pipeline; you call the bridge’s **run_combined**. If you need only breath (no English model), you can instantiate **BreathDetector** and feed chunks with **process_chunk** yourself, and use the output dict as described above.
 

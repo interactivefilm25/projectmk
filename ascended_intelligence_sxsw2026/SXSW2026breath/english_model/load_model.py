@@ -14,13 +14,18 @@ from .download_model import (
 
 
 def get_emotion_model_path() -> Optional[Path]:
-    """Return path to emotion model dir if it exists and has model files."""
-    p = get_emotion_model_dir()
-    if not p.exists():
-        return None
-    # Check for typical model files
-    if (p / "config.json").exists() or (p / "pytorch_model.bin").exists():
-        return p
+    """Return path to emotion model dir if it exists and has model files (Wav2Vec2).
+    Checks english_model/model/multilingual_emotion_model/ and the nested
+    multilingual_emotion_model/multilingual_emotion_model/ subdir (HF download structure).
+    """
+    base = get_emotion_model_dir()  # model/multilingual_emotion_model/
+    for candidate in [base, base / "multilingual_emotion_model"]:
+        if candidate.exists():
+            if (candidate / "config.json").exists() and (
+                (candidate / "pytorch_model.bin").exists()
+                or (candidate / "model.safetensors").exists()
+            ):
+                return candidate
     return None
 
 

@@ -50,12 +50,12 @@ def main():
         return f"{int(st)}–{int(et)} s" if et == int(et) else f"{int(st)}–{et:.1f} s"
 
     sep = " | "
-    print("Time" + sep + "F0 (Hz)" + sep + "BPM" + sep + "Breath State" + sep + "Audio2Emotion" + sep + "Target Hz")
+    print("Time" + sep + "VBI" + sep + "F0" + sep + "Breath State" + sep + "Emotion" + sep + "Hz")
     print("-" * 90)
     for s in segments:
         t = _time_range(s)
+        vbi = s.get("vbi", 0)
         f0 = s["breath_f0"]
-        bpm = s["breath_bpm"]
         breath_str = s.get("primary_emotion", s["breath_emotion"])
         probs = s.get("audio2emotion_probs", {})
         if probs:
@@ -64,9 +64,9 @@ def main():
         else:
             a2e_str = "—"
         target_hz = s.get("target_frequency_hz", "—")
-        print(t + sep + f"{f0:.1f}" + sep + f"{bpm:.1f}" + sep + breath_str + sep + a2e_str + sep + str(target_hz))
+        print(t + sep + f"{vbi:.2f}" + sep + f"{f0:.1f}" + sep + breath_str + sep + a2e_str + sep + str(target_hz))
 
-    # OVERALL: both breath state (strict BPM map) and Audio2Emotion (model prediction)
+    # OVERALL
     print("\nOVERALL (by segment)")
     print("-" * 90)
     primary_counts = {}
@@ -78,7 +78,7 @@ def main():
     n = len(segments)
     primary_top = max(primary_counts.items(), key=lambda x: x[1]) if primary_counts else ("—", 0)
     a2e_top = max(a2e_counts.items(), key=lambda x: x[1]) if a2e_counts else ("—", 0)
-    print(f"  Breath State (BPM map): {primary_top[0]}: {100*primary_top[1]/n:.1f}%")
+    print(f"  Breath State: {primary_top[0]}: {100*primary_top[1]/n:.1f}%")
     print(f"  Audio2Emotion (model):  {a2e_top[0]}: {100*a2e_top[1]/n:.1f}%")
     print("=" * 80)
 

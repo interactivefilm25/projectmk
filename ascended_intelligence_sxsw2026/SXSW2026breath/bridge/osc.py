@@ -1,68 +1,31 @@
 """
-OSC (Open Sound Control) output for TouchDesigner / Max / other visual software.
-
-Usage:
-    from bridge.osc import osc_client, configure_osc
-    
-    # Configure (optional)
-    configure_osc(ip="192.168.1.100", port=9000)
-    
-    # Send data
-    osc_client.send(emotion="happy", confidence=0.95, f0=150.0, 
-                    breath_state="calm", breath_bpm=18.0)
+OSC output for TouchDesigner. Client spec: /vbi, /hz, /emotion, /heartbeat, /active, /glitch.
+Port 5005.
 """
 
-# ============================================================================
-# OSC Configuration
-# ============================================================================
-OSC_ENABLED = True           # Set to False to disable OSC
-OSC_IP = "127.0.0.1"         # TouchDesigner IP
-OSC_PORT = 5005              # TouchDesigner port
+OSC_ENABLED = True
+OSC_IP = "127.0.0.1"
+OSC_PORT = 5005
 
-# Emotion to integer mapping (realtime_emotion_td.py format for TouchDesigner)
-# anger_fear=0, joy_excited=1, sadness=2, curious_reflective=3, calm_content=4, unknown=-1
-# Maps emotion2vec labels -> realtime 0-4
 EMOTION_MAP_REALTIME = {
-    "angry": 0,      # anger_fear
-    "fear": 0,       # anger_fear
-    "happy": 1,      # joy_excited
-    "surprised": 1,  # joy_excited
-    "sad": 2,        # sadness
-    "disgust": 3,    # curious_reflective
-    "neutral": 4,    # calm_content
-    "unknown": -1,
-}
-
-# Legacy 8-label map (kept for reference)
-EMOTION_MAP = {
+    "anger_fear": 0,
+    "joy_excited": 1,
+    "sadness": 2,
+    "curious_reflective": 3,
+    "calm_content": 4,
     "angry": 0,
-    "disgust": 1,
-    "fear": 2,
-    "happy": 3,
+    "fear": 0,
+    "happy": 1,
+    "surprised": 1,
+    "sad": 2,
+    "disgust": 3,
     "neutral": 4,
-    "sad": 5,
-    "surprised": 6,
     "unknown": -1,
-}
-
-# Breath state to integer mapping (used internally, not sent in realtime format)
-BREATH_STATE_MAP = {
-    "calm": 0,
-    "slightly_elevated": 1,
-    "anxious": 2,
-    "high_anxiety": 3,
 }
 
 
 class OSCClient:
-    """
-    Singleton OSC client for sending emotion/breath data to TouchDesigner.
-    Uses same format as realtime_emotion_td.py:
-    
-    OSC Messages:
-      /emotion   - emotion as integer (0-4: anger_fear, joy_excited, sadness, curious_reflective, calm_content; -1=unknown)
-      /frequency - F0 normalized to 0.0-1.0 (50-400Hz vocal range)
-    """
+    """Client spec: /vbi, /hz, /emotion, /heartbeat, /active, /glitch."""
     _instance = None
     
     def __new__(cls):
@@ -92,34 +55,33 @@ class OSCClient:
         self._initialized = False
         self._client = None
     
-    def send(self, emotion: str, confidence: float, f0: float, breath_state: str, breath_bpm: float):
-        """
-        Send emotion and frequency via OSC (realtime_emotion_td.py format).
-        Only /emotion and /frequency are sent, matching TouchDesigner expectations.
-        
-        Args:
-            emotion: Emotion name from emotion2vec (e.g., "happy", "angry")
-            confidence: Confidence score (0.0-1.0) (unused, for API compatibility)
-            f0: Fundamental frequency in Hz
-            breath_state: Breath state label (unused, for API compatibility)
-            breath_bpm: Breath rate in BPM (unused, for API compatibility)
-        """
+    def send(
+        self,
+        emotion: str,
+        target_hz: int | None = None,
+        vbi: float | None = None,
+        bloom: float | None = None,
+    ):
+        """Client spec: /vbi, /hz, /emotion, /heartbeat, /active, /glitch, /bloom."""
         if not self._ensure_initialized():
             return
         try:
-            # Emotion as integer (0-4, same as realtime_emotion_td.py)
-            emotion_int = EMOTION_MAP_REALTIME.get(emotion.lower(), -1)
+            emotion_lower = emotion.lower()
+            emotion_int = EMOTION_MAP_REALTIME.get(emotion_lower, -1)
             self._client.send_message("/emotion", emotion_int)
-            
-            # Normalized frequency (50-400Hz range -> 0.0-1.0)
-            if f0 > 0:
-                freq_norm = max(0.0, min(1.0, (f0 - 50) / (400 - 50)))
-            else:
-                freq_norm = 0.0
-            self._client.send_message("/frequency", freq_norm)
-            
+            if target_hz is not None:
+                self._client.send_message("/hz", float(target_hz))
+            if vbi is not None:
+                self._client.send_message("/vbi", float(vbi))
+            if bloom is not None:
+                self._client.send_message("/bloom", float(bloom))
+            is_calm = emotion_lower in ("calm_content", "calm")
+            is_glitch = 1.0 if (vbi is not None and vbi > 0.7 and is_calm) else 0.0
+            self._client.send_message("/glitch", is_glitch)
+            self._client.send_message("/heartbeat", 1)
+            self._client.send_message("/active", 1)
         except Exception:
-            pass  # Silently ignore OSC errors
+            pass
     
     def send_raw(self, address: str, value):
         """Send a raw OSC message."""
@@ -129,6 +91,22 @@ class OSCClient:
             self._client.send_message(address, value)
         except Exception:
             pass
+
+    def send_heartbeat(self, active: int = 1):
+        """Send /heartbeat and /active (1=alive, 0=severed). TD fades to black when 0."""
+        if not self._ensure_initialized():
+            return
+        try:
+            self._client.send_message("/heartbeat", int(active))
+            self._client.send_message("/active", int(active))
+            if active == 0:
+                self._client.send_message("/hz", 528.0)  # Severing: grounding tone
+        except Exception:
+            pass
+
+    def sever(self):
+        """Severing Protocol: send /heartbeat 0, /active 0, /hz 528 for graceful ritual end."""
+        self.send_heartbeat(0)
 
 
 # Global OSC client instance
@@ -160,11 +138,4 @@ def configure_osc(ip: str = None, port: int = None, enabled: bool = None):
 
 
 def get_osc_info() -> dict:
-    """Get current OSC configuration."""
-    return {
-        "enabled": OSC_ENABLED,
-        "ip": OSC_IP,
-        "port": OSC_PORT,
-        "emotion_map": EMOTION_MAP_REALTIME,
-        "breath_state_map": BREATH_STATE_MAP,
-    }
+    return {"enabled": OSC_ENABLED, "ip": OSC_IP, "port": OSC_PORT}

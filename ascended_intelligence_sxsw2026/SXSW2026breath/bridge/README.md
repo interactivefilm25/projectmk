@@ -8,8 +8,8 @@ The bridge runs the combined pipeline (Breath + emotion model) on audio, optiona
 
 1. **prepare_audio** – Denoise (DeepFilterNet2 or noisereduce) + enhance (rumble filter, light NR, peak norm).
 2. **Breath pipeline** (OpenSMILE): 100 ms chunks, F0, breath rate (BPM), BPM-based state (Calm, Slightly elevated, Anxious, High anxiety).
-3. **Emotion model** (emotion2vec): Full-audio inference, probabilities over six labels (angry, disgust, fear, happy, neutral, sad).
-4. **OSC** – Sends /emotion, /frequency, /breath, /bpm to TouchDesigner (default 127.0.0.1:5005).
+3. **Emotion model** (Wav2Vec2, same as TouchDesigner): Full-audio inference, probabilities over five labels (anger_fear, joy_excited, sadness, curious_reflective, calm_content).
+4. **OSC** – Sends /emotion and /frequency to TouchDesigner (realtime_emotion_td.py format, default 127.0.0.1:5005).
 
 Outputs are kept separate per segment: breath state, Audio2Emotion, and target frequency.
 
@@ -58,7 +58,7 @@ Runs the full pipeline.
 | `primary_emotion` | str | Human-readable breath state (e.g. "Calm and relaxed"). |
 | `breath_f0` | float | Mean F0 (Hz). |
 | `breath_bpm` | float | Mean breath rate (BPM). |
-| `audio2emotion_emotion` | str | Dominant emotion: angry, disgust, fear, happy, neutral, sad. |
+| `audio2emotion_emotion` | str | Dominant emotion: anger_fear, joy_excited, sadness, curious_reflective, calm_content. |
 | `audio2emotion_probs` | dict | Probability per emotion. |
 | `target_frequency_hz` | int | Target Hz for TouchDesigner (639 or 396). |
 
@@ -66,12 +66,12 @@ Runs the full pipeline.
 
 ## 4. OSC messages (sent after each segment)
 
+Same format as `realtime_emotion_td.py` for TouchDesigner compatibility:
+
 | Address | Type | Description |
 |---------|------|-------------|
-| /emotion | int | 0–6 (angry, disgust, fear, happy, neutral, sad, surprised), -1=unknown |
-| /frequency | float | F0 normalized 0.0–1.0 (50–400 Hz) |
-| /breath | int | 0–3 (calm, slightly_elevated, anxious, high_anxiety) |
-| /bpm | float | BPM normalized 0.0–1.0 (10–40 BPM) |
+| /emotion | int | 0–4 (anger_fear, joy_excited, sadness, curious_reflective, calm_content), -1=unknown |
+| /frequency | float | F0 normalized 0.0–1.0 (50–400 Hz vocal range) |
 
 ---
 
@@ -105,7 +105,7 @@ segments = run_combined(waveform=waveform, sample_rate=sr, segment_duration=None
 ## 6. Dependencies
 
 - **ascended.breath_detector** – Breath pipeline.
-- **english_model.get_model()** – emotion2vec (FunASR).
+- **english_model.get_model()** – Wav2Vec2 emotion model (TouchDesigner).
 - **english_model.get_noise_cleaner()** – Noise cleaning.
 - **bridge.osc** – OSC client.
 - **OpenSMILE** – from `opensmile-python-main` or `pip install opensmile`.
